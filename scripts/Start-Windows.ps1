@@ -31,7 +31,7 @@ try {
 
   if (-not $Mode) {
     Write-Host "  1 — только этот компьютер Windows"
-    Write-Host "  2 — Windows и Android в одной локальной сети`n"
+    Write-Host "  2 — Windows и телефон в одной локальной сети`n"
     $Mode = Read-Host "  Выберите режим [1]"
     if (-not $Mode) { $Mode = "1" }
   }
@@ -103,11 +103,11 @@ try {
   Write-Host "  На Windows: $localUrl"
 
   if ($Mode -eq "2") {
-    Write-Host "`n  Режим Windows + Android включён." -ForegroundColor Green
+    Write-Host "`n  Режим Windows + телефон включён." -ForegroundColor Green
     $addresses = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
       Where-Object { $_.IPAddress -ne "127.0.0.1" -and $_.IPAddress -notlike "169.254.*" -and $_.PrefixOrigin -ne "WellKnown" }
     if ($addresses) {
-      $addresses | ForEach-Object { Write-Host "  В приложении Android введите: http://$($_.IPAddress):$Port" }
+      $addresses | ForEach-Object { Write-Host "  В браузере телефона откройте: http://$($_.IPAddress):$Port" }
     } else {
       Write-Host "  Локальный IP не найден. Проверьте подключение к Wi-Fi."
     }
