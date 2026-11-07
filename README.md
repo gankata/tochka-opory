@@ -142,4 +142,6 @@ npm run test:browser
 - [Безопасность](SECURITY.md)
 - [Релизы и примечания к обновлениям](https://github.com/gankata/tochka-opory/releases)
 
+Автор проекта — [gankata](https://github.com/gankata) · 2026.
+
 Проект распространяется по лицензии [MIT](LICENSE).

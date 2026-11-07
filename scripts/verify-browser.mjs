@@ -405,6 +405,20 @@ try {
   await page.getByRole("button", { name: /Тема оформления:/ }).click();
   await page.getByRole("menuitemradio", { name: "Светлая", exact: true }).click();
 
+  await page.goto(`${origin}/data?tab=help`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "О приложении", exact: true }).waitFor();
+  await page.getByText("Автор проекта — gankata", { exact: true }).waitFor();
+  await page.getByText("© 2026 gankata", { exact: true }).waitFor();
+  const sourceLink = page.getByRole("link", { name: "Исходный код", exact: true });
+  const licenseLink = page.getByRole("link", { name: "Лицензия MIT", exact: true });
+  if (await sourceLink.getAttribute("href") !== "https://github.com/gankata/tochka-opory") throw new Error("Project source link is incorrect");
+  if (await licenseLink.getAttribute("href") !== "https://github.com/gankata/tochka-opory/blob/main/LICENSE") throw new Error("MIT license link is incorrect");
+  await page.screenshot({ path: path.join(output, "about-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("About section overflows on mobile");
+  await page.screenshot({ path: path.join(output, "about-mobile.jpg"), type: "jpeg", quality: 88, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
   await page.goto(`${origin}/data`, { waitUntil: "networkidle" });
   const archivePromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Полный JSON-архив", exact: true }).click();
