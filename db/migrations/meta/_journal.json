@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793685816224,
+      "tag": "0000_nebulous_red_skull",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793730205748,
+      "tag": "0001_watery_sebastian_shaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793733599885,
+      "tag": "0002_vengeful_blob",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794044866538,
+      "tag": "0003_crazy_havok",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794046624618,
+      "tag": "0004_soft_maximus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794048043438,
+      "tag": "0005_demonic_power_man",
+      "breakpoints": true
+    }
+  ]
+}

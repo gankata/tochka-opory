@@ -1,0 +1,74 @@
+import { describe, expect, it } from "vitest";
+import type { Payment, Transaction, Workspace } from "@/types";
+import { buildFinancialCalendar, paymentDateForMonth } from "./financial-calendar";
+
+const stamps = { createdAt: new Date("2026-11-01T12:00:00"), updatedAt: new Date("2026-11-01T12:00:00") };
+
+function transaction(id: number, category: string, date = "2026-11-05"): Transaction {
+  return {
+    id, userId: 1, operationDate: date, type: "Расход", category, amountRub: 1200,
+    amountUsd: null, currency: "RUB", originalAmount: 1200, exchangeRate: 1,
+    note: null, source: "Тест", importBatchId: null, externalId: null, clientId: null, ...stamps,
+  };
+}
+
+function payment(id: number, name: string, patch: Partial<Payment> = {}): Payment {
+  return {
+    id, userId: 1, name, amount: 1200, minAmount: null, maxAmount: null,
+    intervalMonths: 1, required: true, sourceType: "Данные пользователя",
+    dayOfMonth: 5, nextDate: null, paidCycle: false, note: null, ...stamps, ...patch,
+  };
+}
+
+function workspace(patch: Partial<Workspace> = {}): Workspace {
+  return {
+    settings: {
+      id: 1, userId: 1, startDate: "2026-01-01", cashRub: 0, cardRub: 0,
+      cashUsd: 0, usdRate: 80, reserveMonths: 3, salaryDay: 15, mode: "Обычный",
+      savingPercent: 30, trackingDays: 14, incomeStrategy: "Худший месяц", statsMonths: 6,
+      walletDays: 3, largeExpenseThreshold: 10000, currencyRates: {}, currencyBalances: {}, ...stamps,
+    },
+    transactions: [], payments: [], envelopes: [], goals: [], moods: [], options: [], notes: [],
+    reminders: [], reconciliations: [], ...patch,
+  };
+}
+
+describe("финансовый календарь", () => {
+  it("группирует фактические операции и добавляет обе зарплатные даты без суммы", () => {
+    const result = buildFinancialCalendar(workspace({ transactions: [transaction(1, "Еда")] }), "2026-11", "2026-11-10");
+    expect(result.byDay["2026-11-05"].map((event) => event.kind)).toEqual(["expense"]);
+    expect(result.byDay["2026-11-13"][0].kind).toBe("salary");
+    expect(result.byDay["2026-11-30"][0].kind).toBe("salary");
+    expect(result.events.filter((event) => event.kind === "salary").every((event) => event.amountRub === null)).toBe(true);
+    expect(result.monthExpense).toBe(1200);
+  });
+
+  it("не дублирует платёж, если расход той же категории уже внесён", () => {
+    const result = buildFinancialCalendar(workspace({
+      transactions: [transaction(1, " аренда ")], payments: [payment(1, "Аренда")],
+    }), "2026-11", "2026-11-10");
+    expect(result.events.filter((event) => event.kind === "payment")).toHaveLength(0);
+    expect(result.events.filter((event) => event.kind === "expense")).toHaveLength(1);
+  });
+
+  it("paidCycle скрывает только текущий цикл и не стирает прошлые месяцы", () => {
+    const data = workspace({ payments: [payment(1, "Аренда", { paidCycle: true })] });
+    expect(buildFinancialCalendar(data, "2026-11", "2026-11-10").events.some((event) => event.kind === "payment")).toBe(false);
+    expect(buildFinancialCalendar(data, "2026-10", "2026-11-10").events.some((event) => event.kind === "payment")).toBe(true);
+  });
+
+  it("соблюдает интервал редкого платежа и не выдумывает дату без якоря", () => {
+    const quarterly = payment(1, "Страховка", { dayOfMonth: 7, nextDate: "2026-11-07", intervalMonths: 3 });
+    expect(paymentDateForMonth(quarterly, "2027-02")).toBe("2027-02-07");
+    expect(paymentDateForMonth(quarterly, "2026-12")).toBeNull();
+    expect(paymentDateForMonth(payment(2, "Без периода", { intervalMonths: 3 }), "2026-11")).toBeNull();
+  });
+
+  it("отдельно перечисляет платежи, которые невозможно поставить на календарь", () => {
+    const result = buildFinancialCalendar(workspace({
+      payments: [payment(1, "Без даты", { dayOfMonth: null })],
+    }), "2026-11", "2026-11-10");
+    expect(result.undatedPayments.map((item) => item.name)).toEqual(["Без даты"]);
+    expect(result.events.some((event) => event.kind === "payment")).toBe(false);
+  });
+});
