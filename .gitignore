@@ -1,3 +1,8 @@
+# Личные рабочие документы остаются только на этом компьютере
+/ROADMAP.md
+/info.md
+/competitive-analysis.md
+
 node_modules/
 dist/
 .toolchain/
