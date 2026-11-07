@@ -129,7 +129,7 @@ export default function GlobalSearch({ open, onOpenChange, data }: {
     >
       <DialogHeader className="sr-only"><DialogTitle>Глобальный поиск</DialogTitle><DialogDescription>Поиск по записям и быстрые действия. Ничего не изменяется без выбора действия.</DialogDescription></DialogHeader>
       <Command shouldFilter={false} loop className="min-h-0 flex-1 bg-transparent">
-        <div className="relative border-b bg-card/55">
+        <div className="relative border-b bg-card/55 transition-colors focus-within:border-primary/60 focus-within:bg-card">
           <CommandInput
             autoFocus
             value={query}
@@ -137,7 +137,7 @@ export default function GlobalSearch({ open, onOpenChange, data }: {
             placeholder="Найти запись или действие…"
             aria-label="Поиск по приложению"
             wrapperClassName="h-16 border-0 pr-12"
-            className="h-16 text-base sm:text-lg"
+            className="h-16 rounded-none text-base [outline:none] focus-visible:[outline:none] sm:text-lg"
           />
           <button type="button" onClick={() => changeOpen(false)} className="absolute right-2 top-2 flex h-12 w-12 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" aria-label="Закрыть поиск"><span className="text-xl leading-none" aria-hidden="true">×</span></button>
         </div>

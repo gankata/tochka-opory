@@ -312,6 +312,12 @@ try {
   await searchDialog.waitFor();
   if (await searchDialog.locator("[data-search-action]").count() !== 6) throw new Error("Not all quick actions are visible");
   await page.getByText("Недавние записи", { exact: true }).waitFor();
+  const searchInput = page.locator('[data-slot="command-input"]');
+  const searchInputWrapper = page.locator('[data-slot="command-input-wrapper"]');
+  const inputOutline = await searchInput.evaluate((element) => getComputedStyle(element).outlineStyle);
+  if (inputOutline !== "none") throw new Error(`Search input has a misplaced focus outline: ${inputOutline}`);
+  const [inputBox, inputWrapperBox] = await Promise.all([searchInput.boundingBox(), searchInputWrapper.boundingBox()]);
+  if (!inputBox || !inputWrapperBox || Math.abs(inputBox.y - inputWrapperBox.y) > 1 || Math.abs(inputBox.height - inputWrapperBox.height) > 1) throw new Error("Search input is not aligned with its header");
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(output, "global-search-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
   await page.keyboard.press("Escape");
