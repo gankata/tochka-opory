@@ -1,5 +1,14 @@
 node_modules/
 dist/
+.toolchain/
+.release/
+.gradle/
+.android-build/
+**/.android-build/
+**/build/
+local.properties
+*.keystore
+*.jks
 data/
 .test-data/
 .test-recovery/
