@@ -7,6 +7,19 @@
 [![React 19](https://img.shields.io/badge/React-19-2f6f4e)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2f6f4e)](https://www.typescriptlang.org/)
 
+## Скачать готовый архив
+
+**[Скачать последнюю версию для macOS и Windows (.zip)](https://github.com/gankata/tochka-opory/releases/latest/download/tochka-opory.zip)**
+
+Git и терминал для обычного запуска не нужны:
+
+1. Распакуйте архив в обычную папку, например «Документы/tochka-opory».
+2. Пока есть интернет, установите [Node.js 22 или новее](https://nodejs.org/).
+3. На Mac откройте `Запустить офлайн.command`, на Windows — `Запустить Windows.bat`.
+4. При первом запуске дождитесь автоматической установки зависимостей и сборки. После этого приложение работает без интернета.
+
+Архив содержит только чистый исходный код и не содержит чужих операций, паролей, баз или резервных копий. Ссылка всегда ведёт на ZIP последнего релиза. [Все версии и примечания к обновлениям](https://github.com/gankata/tochka-opory/releases).
+
 <p align="center">
   <img src="docs/images/dashboard.jpg" alt="Главный экран Точки опоры с тестовыми пустыми данными" width="1000">
 </p>
