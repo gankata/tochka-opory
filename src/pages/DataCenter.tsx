@@ -205,7 +205,22 @@ export default function DataCenter() {
 
     {tab === "help" && <div className="grid gap-5 lg:grid-cols-2"><Section title="Как пользоваться"><div className="space-y-3 text-sm leading-relaxed"><p><b>Каждый вечер:</b> внесите траты в журнал и посмотрите главную. Короткая запись лучше пропущенного дня.</p><p><b>Раз в неделю:</b> пересчитайте кошелёк, сохраните сверку и сделайте резервную копию.</p><p><b>Раз в месяц:</b> проверьте лимиты, цели, запас и актуальные курсы валют. Оранжевые предварительные оценки заменяйте своими данными.</p><p><b>Обзор настроения:</b> просматривайте записи за выбранный период и отмечайте повторяющиеся темы. Дневник помогает наблюдать за состоянием, но не ставит диагнозы.</p><p><b>Откат данных:</b> выберите JSON-снимок или независимую SQLite-копию на вкладке «Копии и история». Перед восстановлением текущее состояние сохраняется.</p></div></Section><Section title="Хранение наличных" description="Общие рекомендации, которые можно адаптировать под свои привычки."><ul className="list-disc space-y-3 pl-5 text-sm leading-relaxed"><li>Разделяйте средства на текущие расходы, обязательные платежи и резерв удобным для вас способом.</li><li>Выбирайте сухое и защищённое место, учитывая риски кражи, пожара и затопления.</li><li>Держите при себе только сумму на ближайшие расходы и пополняйте её по мере необходимости.</li><li>Не сообщайте посторонним о местах и суммах хранения. Для крупного резерва сравните домашнее хранение с банковскими вариантами.</li></ul></Section></div>}
 
-    {tab === "help" && <Section title="О приложении" description="Точка опоры — приложение с открытым исходным кодом."><div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">Автор проекта — gankata</p><p className="mt-1 text-sm text-muted-foreground">© 2026 gankata</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" asChild className="min-h-11"><a href="https://github.com/gankata/tochka-opory" target="_blank" rel="noreferrer">Исходный код</a></Button><Button variant="ghost" asChild className="min-h-11"><a href="https://github.com/gankata/tochka-opory/blob/main/LICENSE" target="_blank" rel="noreferrer">Лицензия MIT</a></Button></div></div></Section>}
+    {tab === "help" && <Section title="О приложении" description="Точка опоры — приложение с открытым исходным кодом.">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div><p className="font-medium">Автор проекта — gankata</p><p className="mt-1 text-sm text-muted-foreground">© 2026 gankata</p></div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" asChild className="min-h-11"><a href="https://github.com/gankata/tochka-opory" target="_blank" rel="noreferrer">Исходный код</a></Button>
+          <Button variant="ghost" asChild className="min-h-11"><a href="https://github.com/gankata/tochka-opory/blob/main/LICENSE" target="_blank" rel="noreferrer">Лицензия MIT</a></Button>
+        </div>
+      </div>
+      <div className="mt-5 rounded-xl bg-secondary/45 p-4 text-sm leading-relaxed text-muted-foreground">
+        <p>Записи хранятся локально на вашем компьютере. Приложение помогает вести учёт и самонаблюдение, но не заменяет финансового, юридического или медицинского специалиста.</p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+          <a className="font-medium text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary" href="/PRIVACY.md" target="_blank" rel="noreferrer">Приватность · Privacy</a>
+          <a className="font-medium text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary" href="/DISCLAIMER.md" target="_blank" rel="noreferrer">Ограничения ответственности · Disclaimer</a>
+        </div>
+      </div>
+    </Section>}
 
     <FormDialog open={backupDialog} onOpenChange={setBackupDialog} title="Новая резервная копия" description="В снимок войдут настройки, операции, планы, цели, записи настроения, заметки, вишлисты, списки, напоминания и сверки."><form onSubmit={(e) => { e.preventDefault(); void makeBackup(); }} className="space-y-5"><Field label="Название"><input required className="field" value={backupName} onChange={(e) => setBackupName(e.target.value)} /></Field><Button className="min-h-11 w-full" disabled={createBackup.isPending}>{createBackup.isPending ? "Создание…" : "Создать копию"}</Button></form></FormDialog>
     <ReminderEditor key={reminderEdit === "new" ? "new" : reminderEdit?.id ?? "closed"} value={reminderEdit} onClose={() => setReminderEdit(null)} />

@@ -1,11 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { ArrowLeftRight, BookOpen, CalendarDays, ChartNoAxesCombined, Cloud, CloudOff, DatabaseBackup, HeartPulse, Landmark, LayoutDashboard, LogOut, MoreHorizontal, Search, WalletCards } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { ThemeSwitcher } from "@/components/app/ThemeSwitcher";
-import GlobalSearch from "@/components/app/GlobalSearch";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
+const GlobalSearch = lazy(() => import("@/components/app/GlobalSearch"));
 
 const navigation = [
   { to: "/", label: "Сегодня", icon: LayoutDashboard },
@@ -95,6 +96,6 @@ export default function AppShell({ children }: { children?: ReactNode }) {
         </nav>
       </SheetContent>
     </Sheet>
-    <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} data={workspace.data} />
+    {searchOpen ? <Suspense fallback={null}><GlobalSearch open onOpenChange={setSearchOpen} data={workspace.data} /></Suspense> : null}
   </div>;
 }

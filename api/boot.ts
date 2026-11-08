@@ -14,6 +14,7 @@ import { log } from "./lib/logger";
 import { handleClientLog } from "./lib/clientlog";
 import { REQUEST_ID_HEADER, runWithRequestId } from "./lib/requestcontext";
 import { registerPublicApi } from "./lib/public-api";
+import { applySecurityHeaders, hasAllowedOrigin } from "./lib/security-headers";
 import type { apiTokens } from "@db/schema";
 
 const app = new Hono<{ Bindings: HttpBindings; Variables: { apiToken: typeof apiTokens.$inferSelect } }>();
@@ -56,24 +57,21 @@ app.use("*", async (c, next) => {
   });
 });
 
-// Scoped to the tRPC route, NOT global: on the dev server (@hono/vite-dev-server)
-// a global bodyLimit breaks bodyless requests. Hono's bodyLimit reads any truthy
-// request stream to the end and then rebuilds the Request with `new Request(raw,
-// { body, duplex: "half" })`; the dev server's Response/Request class makes that
-// rebuild throw `TypeError: Cannot read private member #state ...`, so every
-// bodyless request (DELETE/PATCH on the app's own REST routes) 500s at dispatch.
-// /api/log keeps its own 64KB caps in lib/clientlog.ts, so it needs no middleware.
-app.use("/api/trpc/*", async (c, next) => {
-  const origin = c.req.header("origin");
-  if (c.req.method === "POST" && origin) {
-    try {
-      if (new URL(origin).host !== c.req.header("host")) return c.json({ error: "Cross-origin request rejected" }, 403);
-    } catch {
-      return c.json({ error: "Invalid origin" }, 403);
-    }
-  }
+// Apply headers after routing so they also reach raw tRPC Response objects.
+app.use("*", async (c, next) => {
+  await next();
+  applySecurityHeaders(c.res.headers, { production: env.isProduction, path: c.req.path });
+});
+
+// Browser mutations are same-origin on every API route, including /api/log.
+// Requests without Origin remain available to local CLI and Bearer API clients.
+app.use("/api/*", async (c, next) => {
+  if (!hasAllowedOrigin(c.req.raw)) return c.json({ error: "Cross-origin request rejected" }, 403);
   await next();
 });
+
+// bodyLimit stays scoped to tRPC: a global limit breaks bodyless requests in
+// @hono/vite-dev-server. /api/log has its own smaller limit below.
 app.use("/api/trpc/*", bodyLimit({ maxSize: 120 * 1024 * 1024 }));
 app.get(Paths.oauthCallback, createOAuthCallbackHandler());
 app.use("/api/trpc/*", async (c) => {

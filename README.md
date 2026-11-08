@@ -127,6 +127,7 @@ npm run lint
 npm run check
 npm test
 npm run build
+npm run check:performance
 npm run test:browser
 ```
 
@@ -140,6 +141,8 @@ npm run test:browser
 - [Телефон и локальная сеть](docs/WINDOWS-ANDROID.md)
 - [Участие в разработке](CONTRIBUTING.md)
 - [Безопасность](SECURITY.md)
+- [Приватность · Privacy](PRIVACY.md)
+- [Ограничения ответственности · Disclaimer](DISCLAIMER.md)
 - [Релизы и примечания к обновлениям](https://github.com/gankata/tochka-opory/releases)
 
 Автор проекта — [gankata](https://github.com/gankata) · 2026.

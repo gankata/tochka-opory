@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Note } from "@/types";
-import { collectNoteLinkIds } from "@/lib/note-document";
+import { collectNoteLinkIds } from "@/lib/note-text";
 import { EmptyState, Section } from "@/components/app/Common";
 
 export default function NoteGraph({ notes, onSelect }: { notes: Note[]; onSelect: (id: number) => void }) {

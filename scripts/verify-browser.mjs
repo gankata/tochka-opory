@@ -57,6 +57,25 @@ try {
   }
   if (!ready) throw new Error(`Server did not start\n${serverLogs}`);
 
+  const shellResponse = await fetch(`${origin}/`);
+  const shellHeaders = shellResponse.headers;
+  if (!shellHeaders.get("content-security-policy")?.includes("default-src 'self'")) throw new Error("Production CSP is missing");
+  if (shellHeaders.get("x-frame-options") !== "DENY" || shellHeaders.get("x-content-type-options") !== "nosniff") throw new Error("Browser security headers are missing");
+  const healthResponse = await fetch(`${origin}/api/health`);
+  if (healthResponse.headers.get("cache-control") !== "no-store") throw new Error("Private API responses must not be cached");
+  const crossOriginLog = await fetch(`${origin}/api/log`, {
+    method: "POST",
+    headers: { Origin: "https://attacker.example", "Content-Type": "application/json" },
+    body: JSON.stringify([{ msg: "must-be-rejected" }]),
+  });
+  if (crossOriginLog.status !== 403 || crossOriginLog.headers.get("cache-control") !== "no-store") throw new Error("Cross-origin API mutation was not safely rejected");
+  const sameOriginLog = await fetch(`${origin}/api/log`, {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify([{ msg: "same-origin-security-check" }]),
+  });
+  if (sameOriginLog.status !== 204) throw new Error("Same-origin API mutation was rejected");
+
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1, acceptDownloads: true });
   const page = await context.newPage();
@@ -413,6 +432,15 @@ try {
   const licenseLink = page.getByRole("link", { name: "Лицензия MIT", exact: true });
   if (await sourceLink.getAttribute("href") !== "https://github.com/gankata/tochka-opory") throw new Error("Project source link is incorrect");
   if (await licenseLink.getAttribute("href") !== "https://github.com/gankata/tochka-opory/blob/main/LICENSE") throw new Error("MIT license link is incorrect");
+  const privacyLink = page.getByRole("link", { name: "Приватность · Privacy", exact: true });
+  const disclaimerLink = page.getByRole("link", { name: "Ограничения ответственности · Disclaimer", exact: true });
+  if (await privacyLink.getAttribute("href") !== "/PRIVACY.md" || await disclaimerLink.getAttribute("href") !== "/DISCLAIMER.md") throw new Error("Offline legal document links are incorrect");
+  const [privacyDocument, disclaimerDocument] = await Promise.all([
+    page.request.get(`${origin}/PRIVACY.md`),
+    page.request.get(`${origin}/DISCLAIMER.md`),
+  ]);
+  if (!privacyDocument.ok() || !(await privacyDocument.text()).includes("## English")) throw new Error("Bilingual privacy document is unavailable offline");
+  if (!disclaimerDocument.ok() || !(await disclaimerDocument.text()).includes("## English")) throw new Error("Bilingual disclaimer is unavailable offline");
   await page.screenshot({ path: path.join(output, "about-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
   await page.setViewportSize({ width: 375, height: 812 });
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("About section overflows on mobile");

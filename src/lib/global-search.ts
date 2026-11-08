@@ -1,6 +1,6 @@
 import type { Workspace } from "@/types";
 import { currencyMoney } from "@contracts/currencies";
-import { noteDocumentToPlainText } from "@/lib/note-document";
+import { noteDocumentToPlainText } from "@/lib/note-text";
 import { formatDate, money, operationAmount, operationCurrency, paymentAmount } from "@/lib/utils-app";
 
 export type SearchCategory = "operations" | "notes" | "wishlists" | "mood" | "payments" | "goals" | "sections";

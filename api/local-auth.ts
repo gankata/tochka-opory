@@ -1,7 +1,7 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import * as cookie from "cookie";
-import { and, eq, gt, ne } from "drizzle-orm";
+import { and, eq, gt, lt, ne } from "drizzle-orm";
 import { LocalSession } from "@contracts/constants";
 import { authSessions, localAuth, users, type User } from "@db/schema";
 import { getDb } from "./queries/connection";
@@ -63,6 +63,7 @@ export async function verifyLocalLogin(username: string, password: string): Prom
 
 export async function createLocalSession(userId: number) {
   const token = randomBytes(32).toString("base64url");
+  await getDb().delete(authSessions).where(lt(authSessions.expiresAt, new Date()));
   await getDb().insert(authSessions).values({
     userId,
     tokenHash: tokenDigest(token),

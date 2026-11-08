@@ -17,6 +17,7 @@ import {
 const usernameInput = z.string().trim().min(3).max(64).regex(/^[\p{L}\p{N}._-]+$/u, "Используйте буквы, цифры, точку, дефис или подчёркивание");
 const passwordInput = z.string().min(10).max(128);
 const attempts = new Map<string, { count: number; lockedUntil: number }>();
+const maxAttemptKeys = 500;
 
 function clearCookie(ctx: TrpcContext, name: string, options: ReturnType<typeof getSessionCookieOptions>) {
   ctx.resHeaders.append("set-cookie", cookie.serialize(name, "", {
@@ -52,6 +53,10 @@ function assertLoginAllowed(username: string) {
 }
 
 function registerFailure(key: string) {
+  if (!attempts.has(key) && attempts.size >= maxAttemptKeys) {
+    const oldestKey = attempts.keys().next().value;
+    if (oldestKey !== undefined) attempts.delete(oldestKey);
+  }
   const count = (attempts.get(key)?.count ?? 0) + 1;
   attempts.set(key, { count, lockedUntil: count >= 5 ? Date.now() + Math.min(300, (count - 4) * 60) * 1000 : 0 });
 }

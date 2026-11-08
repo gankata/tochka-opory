@@ -6,7 +6,7 @@ import type { Note } from "@/types";
 import type { NoteDocument, WishlistItem } from "@contracts/notes";
 import { trpc } from "@/providers/trpc";
 import { formatDateTime } from "@/lib/utils-app";
-import { collectNoteLinkIds } from "@/lib/note-document";
+import { collectNoteLinkIds } from "@/lib/note-text";
 import { Button } from "@/components/ui/button";
 import { DeleteButton, Field } from "@/components/app/Common";
 import RichTextEditor from "./RichTextEditor";
