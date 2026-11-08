@@ -1,6 +1,6 @@
 {
   "name": "tochka-opory",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "license": "MIT",
   "author": "gankata",
   "type": "module",
@@ -17,6 +17,7 @@
     "test:browser": "node scripts/verify-browser.mjs",
     "check:public": "node scripts/check-public.mjs",
     "check:performance": "node scripts/check-performance.mjs",
+    "check:windows": "node scripts/check-windows-launcher.mjs",
     "package:release": "node scripts/package-release.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

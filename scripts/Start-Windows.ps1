@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [ValidateSet("1", "2")]
   [string]$Mode = $(if ($env:TOCHKA_MODE) { $env:TOCHKA_MODE } else { "" }),
