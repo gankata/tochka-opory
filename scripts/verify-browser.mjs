@@ -97,6 +97,20 @@ try {
   errors.length = 0;
   badResponses.length = 0;
 
+  await page.goto(`${origin}/plan?tab=wallet`, { waitUntil: "networkidle" });
+  const countedRub = page.getByLabel("Насчитано рублей, ₽", { exact: true });
+  const countedUsd = page.getByLabel("Насчитано долларов, $", { exact: true });
+  const saveReconciliation = page.getByRole("button", { name: "Сохранить сверку", exact: true });
+  if (await countedRub.inputValue() !== "" || await countedUsd.inputValue() !== "") throw new Error("A new user's reconciliation form must be empty");
+  if (!(await saveReconciliation.isDisabled())) throw new Error("An empty reconciliation must not be saved as zeroes");
+  await page.getByText("Введите фактические суммы, чтобы увидеть расхождение.", { exact: true }).waitFor();
+  await countedRub.fill("0");
+  await countedUsd.fill("0");
+  if (await saveReconciliation.isDisabled()) throw new Error("Explicit zero amounts should be valid");
+  await countedRub.fill("");
+  await countedUsd.fill("");
+  await page.screenshot({ path: path.join(output, "planning-empty-reconciliation-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+
   const routes = [
     ["/", "dashboard"], ["/operations", "operations"], ["/analytics", "analytics"], ["/plan", "planning"],
     ["/calendar", "calendar"], ["/mood", "mood"], ["/notes", "notes"], ["/assets", "assets"], ["/data", "data"],
