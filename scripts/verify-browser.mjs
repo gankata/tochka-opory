@@ -11,6 +11,45 @@ async function assertAccessible(page, name) {
   }
 }
 
+async function assertGuideCloseClearance(guideDialog, name) {
+  const [closeBox, imageBox] = await Promise.all([
+    guideDialog.getByRole("button", { name: "Закрыть", exact: true }).boundingBox(),
+    guideDialog.locator(".guide-image").boundingBox(),
+  ]);
+  if (!closeBox || !imageBox) throw new Error(`Guide close/image is not measurable: ${name}`);
+  const overlaps = closeBox.x < imageBox.x + imageBox.width
+    && closeBox.x + closeBox.width > imageBox.x
+    && closeBox.y < imageBox.y + imageBox.height
+    && closeBox.y + closeBox.height > imageBox.y;
+  if (overlaps) throw new Error(`Guide close button overlaps the image: ${name}`);
+}
+
+function rectanglesOverlap(first, second) {
+  return first.x < second.x + second.width
+    && first.x + first.width > second.x
+    && first.y < second.y + second.height
+    && first.y + first.height > second.y;
+}
+
+async function assertToastLayout(page, output, name) {
+  const toast = page.locator("[data-sonner-toast]").filter({ hasText: "Настройки и валютные курсы сохранены" }).last();
+  const icon = toast.locator("[data-icon]");
+  const title = toast.locator("[data-title]");
+  const close = toast.getByRole("button", { name: "Закрыть уведомление", exact: true });
+  await close.waitFor();
+  await page.waitForTimeout(450);
+  const [iconBox, titleBox, closeBox] = await Promise.all([icon.boundingBox(), title.boundingBox(), close.boundingBox()]);
+  if (!iconBox || !titleBox || !closeBox) throw new Error(`Toast elements are not measurable: ${name}`);
+  if (rectanglesOverlap(iconBox, closeBox)) throw new Error(`Toast icon overlaps the close button: ${name}`);
+  if (rectanglesOverlap(titleBox, closeBox)) throw new Error(`Toast title overlaps the close button: ${name}`);
+  if (closeBox.x <= iconBox.x) throw new Error(`Toast close button must be opposite the icon: ${name}`);
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Toast causes horizontal overflow: ${name}`);
+  await assertAccessible(page, `toast-${name}`);
+  await page.screenshot({ path: path.join(output, `toast-${name}.jpg`), type: "jpeg", quality: 92 });
+  await close.click();
+  await toast.waitFor({ state: "hidden" });
+}
+
 const port = 3100;
 const origin = `http://127.0.0.1:${port}`;
 const output = path.resolve(".verification");
@@ -94,14 +133,109 @@ try {
   await page.getByLabel("Повторите пароль", { exact: true }).fill("first-local-password");
   await page.getByRole("button", { name: "Создать вход и продолжить", exact: true }).click();
   await page.waitForURL(`${origin}/`);
+  await page.getByRole("heading", { name: "Ваше пространство готово", exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, "guide-welcome-desktop.jpg"), type: "jpeg", quality: 90 });
+  await page.getByRole("button", { name: "Начать знакомство", exact: true }).click();
+  const guideDialog = page.getByRole("dialog", { name: "Руководство по Точке опоры", exact: true });
+  await guideDialog.waitFor();
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".guide-image");
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  });
+  await page.waitForTimeout(350);
+  await assertAccessible(page, "guide-desktop");
+  await assertGuideCloseClearance(guideDialog, "desktop");
+  await page.screenshot({ path: path.join(output, "guide-step-desktop.jpg"), type: "jpeg", quality: 90 });
+  for (let step = 2; step <= 6; step++) {
+    if (await guideDialog.getByLabel("Перейти к функции", { exact: true }).getByRole("button").count() === 0) throw new Error(`Guide step ${step - 1} has no feature link`);
+    await guideDialog.getByRole("button", { name: "Далее", exact: true }).click();
+    await guideDialog.getByText(`${step} из 6`, { exact: true }).waitFor();
+  }
+  if (await guideDialog.getByLabel("Перейти к функции", { exact: true }).getByRole("button").count() === 0) throw new Error("Last guide step has no feature link");
+  await guideDialog.getByRole("button", { name: "Начать пользоваться", exact: true }).click();
+  await guideDialog.waitFor({ state: "hidden" });
+  await page.reload({ waitUntil: "networkidle" });
+  if (await page.getByRole("heading", { name: "Ваше пространство готово", exact: true }).count()) throw new Error("Completed onboarding must not reopen");
+  await page.getByRole("button", { name: "Руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await guideDialog.press("ArrowRight");
+  await guideDialog.getByText("2 из 6", { exact: true }).waitFor();
+  await guideDialog.press("ArrowLeft");
+  await guideDialog.getByText("1 из 6", { exact: true }).waitFor();
+  await guideDialog.press("Escape");
+  await guideDialog.waitFor({ state: "hidden" });
+  await page.evaluate(() => localStorage.setItem("tochka-last-seen-version", "1.3.0"));
+  await page.reload({ waitUntil: "networkidle" });
+  const updateDialog = page.getByRole("dialog", { name: "Что нового", exact: true });
+  await updateDialog.waitFor();
+  await updateDialog.locator("li").filter({ hasText: "Гибкий график дохода" }).waitFor();
+  await page.screenshot({ path: path.join(output, "guide-update-desktop.jpg"), type: "jpeg", quality: 90 });
+  await updateDialog.getByRole("button", { name: "Открыть руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await guideDialog.getByRole("button", { name: "Пропустить", exact: true }).click();
+  await guideDialog.waitFor({ state: "hidden" });
+  await page.reload({ waitUntil: "networkidle" });
+  if (await updateDialog.count()) throw new Error("Update notice must appear only once");
   await page.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
   if (await page.getByRole("heading", { name: "Иностранная валюта", exact: true }).count()) throw new Error("A new user must not see an empty foreign currency section");
   if (await page.locator("[data-currency]").count()) throw new Error("A new user must not see empty currency cards");
+
+  await page.getByRole("button", { name: "Руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await guideDialog.getByText("Дата остатков — точка начала расчёта.", { exact: false }).waitFor();
+  await guideDialog.getByText("Тип и дни можно менять в любой момент", { exact: false }).waitFor();
+  await guideDialog.getByRole("button", { name: "Настроить график дохода", exact: true }).waitFor();
+  await guideDialog.getByRole("button", { name: "Указать остатки", exact: true }).click();
+  await page.waitForURL(`${origin}/data?tab=settings`);
+  await guideDialog.waitFor({ state: "hidden" });
+
+  const dataHint = page.getByRole("button", { name: "Подсказка: Ваши данные остаются вашими", exact: true });
+  const hintContent = page.locator("[data-feature-hint-content]");
+  await dataHint.click();
+  await hintContent.getByText("Локальная база работает без облака.", { exact: false }).waitFor();
+  await page.keyboard.press("Escape");
+  await hintContent.waitFor({ state: "hidden" });
+  await page.mouse.move(0, 0);
+  await dataHint.hover();
+  await hintContent.waitFor();
+  await page.waitForTimeout(250);
+  await assertAccessible(page, "feature-hint-desktop");
+  await page.screenshot({ path: path.join(output, "feature-hint-desktop.jpg"), type: "jpeg", quality: 90 });
+  await page.mouse.move(0, 0);
+  await hintContent.waitFor({ state: "hidden" });
+
+  const incomeHint = page.getByRole("button", { name: "Подсказка: График дохода", exact: true });
+  await incomeHint.click();
+  await hintContent.getByText("главная, календарь и связанные прогнозы — после сохранения настроек", { exact: false }).waitFor();
+  await hintContent.getByText("Уже внесённые доходы и расходы останутся без изменений.", { exact: false }).waitFor();
+  await page.keyboard.press("Escape");
+  await hintContent.waitFor({ state: "hidden" });
+
+  const hintsToggle = page.getByRole("switch", { name: "Показывать контекстные подсказки", exact: true });
+  await hintsToggle.click();
+  await page.waitForFunction(() => document.querySelectorAll("[data-feature-hint]").length === 0);
+  await page.reload({ waitUntil: "networkidle" });
+  if (await page.locator("[data-feature-hint]").count()) throw new Error("Disabled feature hints reappeared after reload");
+  await page.getByRole("button", { name: "Руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await guideDialog.press("Escape");
+  await guideDialog.waitFor({ state: "hidden" });
+  await hintsToggle.click();
+  await page.waitForSelector("[data-feature-hint]");
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("[data-feature-hint]");
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
   await page.getByLabel("Наличные, $", { exact: true }).fill("100");
   await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
   await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+  await assertToastLayout(page, output, "desktop");
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+  await assertToastLayout(page, output, "mobile");
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.locator('[data-currency="USD"]').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-currency="USD"]')?.textContent?.includes("100"));
@@ -208,6 +342,79 @@ try {
   await incomeDialog.getByLabel("Комментарий", { exact: true }).fill("Проверочный доход");
   await incomeDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
   await incomeDialog.waitFor({ state: "hidden" });
+
+  const incomeScheduleSelect = page.getByLabel("График дохода", { exact: true });
+  const saveIncomeSchedule = async () => {
+    await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+    await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+    await page.reload({ waitUntil: "networkidle" });
+  };
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  if (await incomeScheduleSelect.inputValue() !== "twice") throw new Error("Legacy settings must retain the twice-monthly schedule");
+  await page.getByLabel("Первая выплата, день", { exact: true }).fill("10");
+  await page.getByLabel("Правило второй выплаты", { exact: true }).selectOption("custom");
+  await page.getByLabel("Вторая выплата, день", { exact: true }).fill("25");
+  await saveIncomeSchedule();
+  if (await page.getByLabel("Первая выплата, день", { exact: true }).inputValue() !== "10" || await page.getByLabel("Вторая выплата, день", { exact: true }).inputValue() !== "25") throw new Error("Custom income days were not persisted");
+  await page.getByText("Ближайшие плановые даты", { exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, "income-schedule-custom-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
+  await page.getByText("Первая зарплата · 10-е число", { exact: true }).waitFor();
+  await page.getByText("Вторая зарплата · 25-е число", { exact: true }).waitFor();
+  await assertAccessible(page, "income-schedule-custom-calendar-desktop");
+  await page.screenshot({ path: path.join(output, "income-calendar-custom-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Подробный обзор", exact: true }).click();
+  await page.getByText("Первая зарплата · 10-е число", { exact: true }).waitFor();
+  await page.getByText("Вторая зарплата · 25-е число", { exact: true }).waitFor();
+
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  await incomeScheduleSelect.selectOption("monthly");
+  await page.getByLabel("День выплаты", { exact: true }).fill("20");
+  await saveIncomeSchedule();
+  if (await incomeScheduleSelect.inputValue() !== "monthly") throw new Error("Monthly income schedule was not persisted");
+  await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
+  await page.getByText("Зарплата · 20-е число", { exact: true }).waitFor();
+  if (await page.locator('section[aria-label="Зарплатные даты выбранного месяца"] .number').count() !== 1) throw new Error("Monthly schedule must show exactly one planned date");
+
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  await incomeScheduleSelect.selectOption("irregular");
+  await page.getByText("Доходы без фиксированных дат", { exact: true }).waitFor();
+  await saveIncomeSchedule();
+  if (await incomeScheduleSelect.inputValue() !== "irregular") throw new Error("Irregular income schedule was not persisted");
+  await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Доходы без фиксированного графика", exact: true }).waitFor();
+  if (await page.getByRole("button", { name: "Зарплата", exact: true }).count()) throw new Error("Irregular calendar must hide the salary filter");
+  if (await page.getByText("Плановая дата", { exact: true }).count()) throw new Error("Irregular calendar must not contain salary plans");
+  await page.locator('button[aria-describedby="calendar-day-2026-11-01-description"]').click();
+  await page.getByText("Проверочный доход", { exact: true }).first().waitFor();
+  await assertAccessible(page, "income-schedule-irregular-calendar-desktop");
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Подробный обзор", exact: true }).click();
+  await page.getByRole("heading", { name: "Доход без фиксированных дат", exact: true }).waitFor();
+  if (await page.getByText(/До зарплаты:/).count()) throw new Error("Irregular dashboard must not show a salary countdown");
+  await page.screenshot({ path: path.join(output, "income-irregular-dashboard-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.getByRole("button", { name: "Добавить доход", exact: true }).click();
+  const irregularIncomeDialog = page.getByRole("dialog", { name: "Новая операция", exact: true });
+  await irregularIncomeDialog.waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-slot="dialog-content"] select')?.value === "Доход");
+  await irregularIncomeDialog.getByRole("button", { name: "Отмена", exact: true }).click();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Income schedule settings overflow on mobile");
+  await assertAccessible(page, "income-schedule-irregular-settings-mobile");
+  await page.screenshot({ path: path.join(output, "income-schedule-irregular-mobile.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Irregular calendar overflows on mobile");
+  await page.screenshot({ path: path.join(output, "income-irregular-calendar-mobile.jpg"), type: "jpeg", quality: 88, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  await incomeScheduleSelect.selectOption("twice");
+  await page.getByLabel("Первая выплата, день", { exact: true }).fill("15");
+  await page.getByLabel("Правило второй выплаты", { exact: true }).selectOption("last-working");
+  await saveIncomeSchedule();
+  if (await page.getByLabel("Правило второй выплаты", { exact: true }).inputValue() !== "last-working") throw new Error("Default second salary rule was not restored");
 
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
   const journalSearch = page.getByLabel("Поиск операций", { exact: true });
@@ -347,7 +554,7 @@ try {
 
   await page.getByRole("button", { name: "Свой период", exact: true }).click();
   await page.getByText("В этом периоде нет расходов", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Начало периода", exact: true }).click();
+  await page.getByRole("button", { name: /^Начало периода, обязательное поле:/ }).click();
   await page.locator(".date-picker-popover").waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "6 мес.", exact: true }).click();
@@ -361,7 +568,7 @@ try {
 
   await page.goto(`${origin}/mood`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Новая запись", exact: true }).first().click();
-  await page.getByRole("button", { name: "Дата", exact: true }).click();
+  await page.getByRole("button", { name: /^Дата, обязательное поле:/ }).click();
   const desktopCalendar = page.locator(".date-picker-popover");
   await desktopCalendar.waitFor();
   await page.waitForTimeout(250);
@@ -377,13 +584,13 @@ try {
   await page.goto(`${origin}/plan`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Добавить платёж", exact: true }).click();
   await page.waitForTimeout(300);
-  await page.getByRole("button", { name: "Ближайшая дата", exact: true }).click();
+  await page.getByRole("button", { name: /^Ближайшая дата:/ }).click();
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(output, "date-picker-payment-desktop.jpg"), type: "jpeg", quality: 88, fullPage: false });
   await desktopCalendar.getByRole("button", { name: "Сегодня", exact: true }).click();
-  await page.getByRole("button", { name: "Ближайшая дата", exact: true }).click();
+  await page.getByRole("button", { name: /^Ближайшая дата:/ }).click();
   await desktopCalendar.getByRole("button", { name: "Очистить", exact: true }).click();
-  const clearedDate = await page.getByRole("button", { name: "Ближайшая дата", exact: true }).innerText();
+  const clearedDate = await page.getByRole("button", { name: /^Ближайшая дата:/ }).innerText();
   if (!clearedDate.includes("Выберите дату")) throw new Error("Optional date could not be cleared");
   await page.getByRole("dialog").getByLabel("Название", { exact: true }).fill("Аренда квартиры");
   await page.getByRole("dialog").getByLabel("Сумма, ₽", { exact: true }).fill("100000");
@@ -450,7 +657,11 @@ try {
   });
   await page.getByRole("button", { name: "PDF", exact: true }).click();
   await page.waitForFunction(() => document.body.dataset.pdfProof?.includes("Важная мысль") && document.body.dataset.pdfImage === "1");
-  await page.screenshot({ path: path.join(output, "notes-rich-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.waitForTimeout(4500);
+  await page.screenshot({ path: path.join(output, "notes-rich-desktop.jpg"), type: "jpeg", quality: 88, fullPage: false });
 
   await page.getByRole("button", { name: "Желания", exact: true }).click();
   await page.waitForFunction(() => document.querySelector('input[aria-label="Название страницы"]')?.value === "Мой вишлист");
@@ -594,6 +805,7 @@ try {
   const archive = JSON.parse(await fs.readFile(await archiveDownload.path(), "utf8"));
   if (archive.noteAssets?.length !== 1 || archive.noteAssets[0].data !== png.toString("base64")) throw new Error("Full archive did not preserve image bytes");
   if (!archive.notes.some((note) => note.document?.content)) throw new Error("Full archive lost rich documents");
+  if (archive.settings?.incomeSchedule !== "twice" || archive.settings?.salaryDay !== 15 || archive.settings?.secondSalaryDay !== null) throw new Error("Full archive did not preserve the income schedule");
 
   await page.getByRole("button", { name: "Создать копию", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
@@ -743,6 +955,41 @@ try {
   }
 
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Ещё", exact: true }).click();
+  const guideMorePanel = page.getByRole("dialog", { name: "Другие разделы", exact: true });
+  await guideMorePanel.getByRole("button", { name: "Открыть руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".guide-image");
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  });
+  await page.waitForTimeout(350);
+  await assertAccessible(page, "guide-mobile");
+  await assertGuideCloseClearance(guideDialog, "mobile");
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mobile guide horizontal overflow");
+  await page.screenshot({ path: path.join(output, "guide-step-mobile.jpg"), type: "jpeg", quality: 90 });
+  const guideScroll = guideDialog.locator(".grid.min-h-0");
+  const guideScrolled = await guideScroll.evaluate((element) => {
+    if (element.scrollHeight <= element.clientHeight) return false;
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop > 0;
+  });
+  if (!guideScrolled) throw new Error("Long mobile guide content is not scrollable");
+  await guideDialog.getByRole("button", { name: "Указать остатки", exact: true }).waitFor();
+  await page.screenshot({ path: path.join(output, "guide-step-scrolled-mobile.jpg"), type: "jpeg", quality: 90 });
+  await guideScroll.evaluate((element) => { element.scrollTop = 0; });
+  await guideDialog.getByRole("button", { name: "Далее", exact: true }).click();
+  await guideDialog.getByText("2 из 6", { exact: true }).waitFor();
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".guide-image");
+    return image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0;
+  });
+  await page.screenshot({ path: path.join(output, "guide-step-two-mobile.jpg"), type: "jpeg", quality: 90 });
+  await guideDialog.getByRole("button", { name: "Открыть операции", exact: true }).click();
+  await page.waitForURL(`${origin}/operations`);
+  await guideDialog.waitFor({ state: "hidden" });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mobile guide link destination horizontal overflow");
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   for (const [route, label] of [["/analytics", "Аналитика"], ["/calendar", "Календарь"], ["/plan", "План"], ["/assets", "Капитал"], ["/data", "Данные"]]) {
     await page.getByRole("button", { name: "Ещё", exact: true }).click();
     const morePanel = page.getByRole("dialog", { name: "Другие разделы", exact: true });
@@ -783,7 +1030,7 @@ try {
 
   await page.goto(`${origin}/mood`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Новая запись", exact: true }).first().click();
-  await page.getByRole("button", { name: "Дата", exact: true }).click();
+  await page.getByRole("button", { name: /^Дата, обязательное поле:/ }).click();
   const mobileCalendar = page.locator(".date-picker-popover");
   await mobileCalendar.waitFor();
   await page.waitForTimeout(250);
@@ -807,7 +1054,7 @@ try {
   console.log("consoleErrors", JSON.stringify(errors));
   console.log("badResponses", JSON.stringify(badResponses));
   if (errors.length || badResponses.length) throw new Error("Browser release gate failed");
-  console.log("Auth, rich notes, exports, global search, quick actions, deep links, backup and mobile layout: OK");
+  console.log("Auth, guide links, feature hints, rich notes, exports, global search, quick actions, deep links, backup and mobile layout: OK");
 } finally {
   if (secondContext) await secondContext.close();
   if (browser) await browser.close();

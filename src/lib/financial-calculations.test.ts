@@ -16,6 +16,8 @@ function settings(patch: Partial<Settings> = {}): Settings {
     usdRate: 80,
     reserveMonths: 3,
     salaryDay: 15,
+    secondSalaryDay: null,
+    incomeSchedule: "twice",
     mode: "Обычный",
     savingPercent: 30,
     trackingDays: 14,
@@ -234,6 +236,27 @@ describe("финансовые расчёты", () => {
     expect(positiveForeignBalances(result.currencyBalances)).toEqual([]);
     expect(result.actualTransactions).toHaveLength(1);
     expect(result.actualTransactions[0]).toMatchObject({ type: "Обмен", category: "Продажа валюты", originalAmount: -100 });
+  });
+
+  it("отключает только зарплатный прогноз для нерегулярного дохода", () => {
+    const result = calculateWorkspace(workspace({
+      settings: settings({ incomeSchedule: "irregular", reserveMonths: 2 }),
+      payments: [payment(1, "Аренда", 1000)],
+      transactions: [transaction(1, "Доход", 2500, "2026-11-02")],
+    }), now);
+
+    expect(result.salarySchedule).toEqual([]);
+    expect(result.salaryPayment).toBeNull();
+    expect(result.salary).toBeNull();
+    expect(result.salaryDaysLeft).toBeNull();
+    expect(result.daysToSalary).toBeNull();
+    expect(result.knownBeforeSalary).toBeNull();
+    expect(result.possibleBeforeSalary).toBeNull();
+    expect(result.forecastAfterSalary).toBeNull();
+    expect(result.bookRub).toBe(3500);
+    expect(result.monthIncome).toBe(2500);
+    expect(result.reserveTarget).toBe(2000);
+    expect(result.spendableRub).toBe(1500);
   });
 });
 

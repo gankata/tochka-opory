@@ -8,7 +8,7 @@ function workspace(patch: Partial<Workspace> = {}): Workspace {
   return {
     settings: {
       id: 1, userId: 1, startDate: "2026-01-01", cashRub: 0, cardRub: 0,
-      cashUsd: 0, usdRate: 80, reserveMonths: 3, salaryDay: 15, mode: "Обычный",
+      cashUsd: 0, usdRate: 80, reserveMonths: 3, salaryDay: 15, secondSalaryDay: null, incomeSchedule: "twice", mode: "Обычный",
       savingPercent: 30, trackingDays: 14, incomeStrategy: "Худший месяц", statsMonths: 6,
       walletDays: 3, largeExpenseThreshold: 10000, currencyRates: {}, currencyBalances: {}, ...stamps,
     },

@@ -1,8 +1,16 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { restoreAdjacentData } from "./lib/data-migration.mjs";
 
 if (!fs.existsSync("dist/boot.js")) {
   console.error("Сначала выполните npm run build");
+  process.exit(1);
+}
+
+try {
+  await restoreAdjacentData();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 }
 

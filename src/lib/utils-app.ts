@@ -1,7 +1,7 @@
 import type { Payment, Reminder, Settings, Workspace } from "@/types";
 import { currencyCodes } from "@contracts/currencies";
 import { normalizeOperationCategory } from "@contracts/operationCategories";
-import { lastRussianWorkingDay, nextSalaryPayment, upcomingSalaryPayments } from "@/lib/working-days";
+import { lastRussianWorkingDay, upcomingIncomePayments } from "@/lib/working-days";
 
 export const todayISO = (date = new Date()) => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -54,7 +54,7 @@ export function lastWorkingDay(year: number, month: number) {
   return lastRussianWorkingDay(year, month);
 }
 export function nextSalary(settings: Settings, from = new Date()) {
-  return nextSalaryPayment(settings.salaryDay, from).date;
+  return upcomingIncomePayments(settings, from, 1)[0]?.date ?? null;
 }
 const isoFromDate = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
@@ -138,33 +138,39 @@ export function calculateWorkspace(data: Workspace, now = new Date()) {
   const freeOverReserve = roundMoney(reserveBase - reserveTarget);
   const reserveGap = roundMoney(Math.max(0, -freeOverReserve));
   const spendableRub = Math.max(0, freeOverReserve);
-  const salarySchedule = upcomingSalaryPayments(s.salaryDay, now, 2);
-  const salaryPayment = salarySchedule[0];
-  const salary = salaryPayment.date;
-  const salaryDaysLeft = Math.max(0, Math.ceil((salary.getTime() - parseDay(today).getTime()) / 86400000));
-  const daysToSalary = Math.max(1, salaryDaysLeft);
+  const salarySchedule = upcomingIncomePayments(s, now, 2);
+  const salaryPayment = salarySchedule[0] ?? null;
+  const salary = salaryPayment?.date ?? null;
+  const salaryDaysLeft = salary ? Math.max(0, Math.ceil((salary.getTime() - parseDay(today).getTime()) / 86400000)) : null;
+  const daysToSalary = salaryDaysLeft == null ? null : Math.max(1, salaryDaysLeft);
   const monthExpenses = monthTx.filter((t) => t.type === "Расход");
   const recordedPaymentIds = data.payments
     .filter((payment) => payment.intervalMonths === 1 && monthExpenses.some((transaction) =>
       normalizeOperationCategory(transaction.category) === normalizeOperationCategory(payment.name),
     ))
     .map((payment) => payment.id);
-  let knownBeforeSalary = 0;
-  let possibleBeforeSalary = 0;
-  activePayments.filter((p) => !p.paidCycle && !recordedPaymentIds.includes(p.id)).forEach((p) => {
-    let due: string | null = p.nextDate;
-    if (!due && p.dayOfMonth && p.intervalMonths === 1) {
-      const candidate = new Date(now.getFullYear(), now.getMonth(), p.dayOfMonth, 12);
-      if (isoFromDate(candidate) < today) candidate.setMonth(candidate.getMonth() + 1);
-      due = isoFromDate(candidate);
-    }
-    if (due && due >= today && due <= isoFromDate(salary)) knownBeforeSalary += paymentAmount(p, true);
-    else if (!due) possibleBeforeSalary += paymentAmount(p, true);
-  });
-  knownBeforeSalary = roundMoney(knownBeforeSalary);
-  possibleBeforeSalary = roundMoney(possibleBeforeSalary);
+  let knownBeforeSalary: number | null = null;
+  let possibleBeforeSalary: number | null = null;
+  if (salary) {
+    knownBeforeSalary = 0;
+    possibleBeforeSalary = 0;
+    activePayments.filter((p) => !p.paidCycle && !recordedPaymentIds.includes(p.id)).forEach((p) => {
+      let due: string | null = p.nextDate;
+      if (!due && p.dayOfMonth && p.intervalMonths === 1) {
+        const candidate = new Date(now.getFullYear(), now.getMonth(), p.dayOfMonth, 12);
+        if (isoFromDate(candidate) < today) candidate.setMonth(candidate.getMonth() + 1);
+        due = isoFromDate(candidate);
+      }
+      if (due && due >= today && due <= isoFromDate(salary)) knownBeforeSalary = (knownBeforeSalary ?? 0) + paymentAmount(p, true);
+      else if (!due) possibleBeforeSalary = (possibleBeforeSalary ?? 0) + paymentAmount(p, true);
+    });
+    knownBeforeSalary = roundMoney(knownBeforeSalary);
+    possibleBeforeSalary = roundMoney(possibleBeforeSalary);
+  }
   const dailyVariable = variableMonthly / 30.4;
-  const forecastAfterSalary = roundMoney(bookRub - knownBeforeSalary - possibleBeforeSalary - dailyVariable * daysToSalary);
+  const forecastAfterSalary = salary && daysToSalary !== null && knownBeforeSalary !== null && possibleBeforeSalary !== null
+    ? roundMoney(bookRub - knownBeforeSalary - possibleBeforeSalary - dailyVariable * daysToSalary)
+    : null;
   const envelopeCategories = new Set(data.envelopes.map((e) => normalizeOperationCategory(e.name)));
   const monthVariableSpent = roundMoney(monthExpenses
     .filter((t) => envelopeCategories.has(normalizeOperationCategory(t.category)))

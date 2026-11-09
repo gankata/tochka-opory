@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { isIncomeOnlyCategory, normalizeOperationCategory } from "@contracts/operationCategories";
 import { currencyCodes, isCurrencyCode } from "@contracts/currencies";
+import { incomeScheduleTypes } from "@contracts/incomeSchedule";
 import { noteKinds, wishlistPriorities, type NoteExport } from "@contracts/notes";
 import { adminQuery, createRouter } from "./middleware";
 import { getDb } from "./queries/connection";
@@ -117,7 +118,9 @@ const settingsInput = z.object({
   cashUsd: z.number().finite().nonnegative(),
   usdRate: z.number().finite().positive(),
   reserveMonths: z.number().int().min(0).max(120),
-  salaryDay: z.number().int().min(1).max(28),
+  salaryDay: z.number().int().min(1).max(31),
+  secondSalaryDay: z.number().int().min(1).max(31).nullish(),
+  incomeSchedule: z.enum(incomeScheduleTypes),
   mode: z.enum(["Обычный", "Экономия"]),
   savingPercent: z.number().int().min(0).max(90),
   trackingDays: z.number().int().min(1).max(365),

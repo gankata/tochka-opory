@@ -31,6 +31,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--success-bg": "var(--popover)",
           "--success-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          "--toast-close-button-start": "auto",
+          "--toast-close-button-end": "0",
+          "--toast-close-button-transform": "translate(35%, -35%)",
         } as React.CSSProperties
       }
       {...props}

@@ -10,6 +10,8 @@ export const importedSettings = {
   usdRate: 80,
   reserveMonths: 3,
   salaryDay: 15,
+  secondSalaryDay: null,
+  incomeSchedule: "twice" as const,
   mode: "Обычный" as const,
   savingPercent: 30,
   trackingDays: 14,

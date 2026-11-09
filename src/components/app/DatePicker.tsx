@@ -50,8 +50,9 @@ export function DatePicker({
         type="button"
         className="field group min-h-12 items-center justify-between gap-3 text-left hover:border-primary/45 hover:bg-secondary/35 aria-expanded:border-primary aria-expanded:ring-2 aria-expanded:ring-primary/15"
         disabled={disabled}
-        aria-label={ariaLabel}
-        aria-required={required}
+        aria-label={ariaLabel
+          ? `${ariaLabel}${required ? ", обязательное поле" : ""}: ${value ? longDate(value) : placeholder}`
+          : undefined}
       >
         <span className="flex min-w-0 items-center gap-3">
           <CalendarDays className="h-5 w-5 shrink-0 text-primary transition-transform duration-200 group-hover:-rotate-3" />

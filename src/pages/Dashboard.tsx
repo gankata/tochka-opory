@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorPage, LoadingPage, Metric, PageHeader, Section } from "@/components/app/Common";
 
 type DashboardBlock = "metrics" | "wallets" | "planning" | "insights" | "reminders";
-const dashboardLabels: Record<DashboardBlock, string> = { metrics: "Ключевые показатели", wallets: "Кошелёк по валютам", planning: "Зарплата и запас", insights: "Доходы и состояние", reminders: "Напоминания" };
+const dashboardLabels: Record<DashboardBlock, string> = { metrics: "Ключевые показатели", wallets: "Кошелёк по валютам", planning: "Доход и запас", insights: "Доходы и состояние", reminders: "Напоминания" };
 const defaultDashboardOrder: DashboardBlock[] = ["metrics", "wallets", "planning", "insights", "reminders"];
 type DashboardPreferences = { order: DashboardBlock[]; hidden: DashboardBlock[]; compact: boolean };
 function readDashboardPreferences(): DashboardPreferences {
@@ -43,6 +43,14 @@ export default function Dashboard() {
   const foreignBalances = positiveForeignBalances(calc.currencyBalances);
   const missingVisibleRates = foreignBalances.filter((balance) => !(balance.rate > 0)).map((balance) => balance.code);
   const reservePercent = calc.reserveTarget ? Math.min(100, Math.max(0, calc.reserveBase / calc.reserveTarget * 100)) : 100;
+  const salaryForecast = calc.salaryPayment && calc.salary && calc.salaryDaysLeft !== null && calc.forecastAfterSalary !== null && calc.knownBeforeSalary !== null && calc.possibleBeforeSalary !== null ? {
+    payment: calc.salaryPayment,
+    date: calc.salary,
+    daysLeft: calc.salaryDaysLeft,
+    forecast: calc.forecastAfterSalary,
+    known: calc.knownBeforeSalary,
+    possible: calc.possibleBeforeSalary,
+  } : null;
   const missingDates = data.payments.filter((p) => !p.dayOfMonth && !p.nextDate).length;
   const unsetEnvelopes = data.envelopes.filter((e) => e.monthlyLimit == null && e.estimatedAmount == null).length;
   const dateTitle = new Intl.DateTimeFormat("ru-RU", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
@@ -115,24 +123,27 @@ export default function Dashboard() {
         </Section>
 
         <Section title="Последнее состояние" description="Короткие записи помогают вернуться к событиям дня." action={<button onClick={() => navigate("/mood")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Дневник<ArrowRight className="h-4 w-4" /></button>}>
-          {data.moods.length ? <div className="divide-y">{data.moods.slice(0, 3).map((mood) => <button key={mood.id} onClick={() => navigate("/mood")} className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left first:pt-0 last:pb-0"><span className="min-w-0"><span className="block truncate text-sm font-medium">{mood.emotion}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{formatDate(mood.entryDate)} · {mood.topic}</span></span><span className="number shrink-0 text-lg font-semibold">{mood.mood}</span></button>)}</div> : <EmptyState title="Дневник готов к первой записи" text="Дата, настроение, эмоция и тема — остальное только если есть силы." action={<Button variant="outline" onClick={() => navigate("/mood?new=1")} className="min-h-11">Сделать запись</Button>} />}
+          {data.moods.length ? <div className="divide-y">{data.moods.slice(0, 3).map((mood) => <button key={mood.id} onClick={() => navigate("/mood")} className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left first:pt-0 last:pb-0"><span className="min-w-0"><span className="block truncate text-sm font-medium">{mood.emotion}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{formatDate(mood.entryDate)} · {mood.topic}</span></span><span className="number shrink-0 text-lg font-semibold">{mood.mood}</span></button>)}</div> : <EmptyState title="Дневник готов к первой записи" text="Достаточно даты, настроения, эмоции и темы — детали можно добавить позже." action={<Button variant="outline" onClick={() => navigate("/mood?new=1")} className="min-h-11">Сделать запись</Button>} />}
         </Section>
       </div>
 
       <div id="dashboard-details" className={showDetails ? "contents" : "hidden"}>
         <div style={advancedBlockStyle("planning")} className={`grid gap-5 xl:grid-cols-[1.3fr_1fr] ${blockClass("planning")}`}>
-          <Section title={calc.salaryDaysLeft === 0 ? "Зарплата сегодня" : `До зарплаты: ${calc.salaryDaysLeft} дн.`} description={`${calc.salaryPayment.label} — ${formatDate(calc.salary)}${calc.salaryPayment.shifted ? ` Перенос с ${formatDate(calc.salaryPayment.nominalDate)}: ${calc.salaryPayment.shiftReason?.toLowerCase()}.` : ""} Рублёвый прогноз учитывает непроведённые платежи и плановые повседневные траты; другие валюты не входят.`}>
-            <div className="mb-5 grid gap-2 sm:grid-cols-2">{calc.salarySchedule.map((payment) => <button key={`${payment.kind}-${payment.isoDate}`} onClick={() => navigate("/calendar")} className="rounded-xl bg-secondary/55 p-3 text-left transition-colors hover:bg-secondary"><p className="text-xs text-muted-foreground">{payment.label}</p><p className="number mt-0.5 font-semibold">{formatDate(payment.date)}</p>{payment.shifted && <p className="mt-1 text-[11px] text-muted-foreground">перенос: {payment.shiftReason?.toLowerCase()}</p>}</button>)}</div>
+          {salaryForecast ? <Section title={salaryForecast.daysLeft === 0 ? "Зарплата сегодня" : `До зарплаты: ${salaryForecast.daysLeft} дн.`} description={`${salaryForecast.payment.label} — ${formatDate(salaryForecast.date)}${salaryForecast.payment.shifted ? ` Перенос с ${formatDate(salaryForecast.payment.nominalDate)}: ${salaryForecast.payment.shiftReason?.toLowerCase()}.` : ""} Рублёвый прогноз учитывает непроведённые платежи и плановые повседневные траты; другие валюты не входят.`}>
+            <div className="mb-5 grid gap-2 sm:grid-cols-2">{calc.salarySchedule.map((payment) => <button key={`${payment.kind}-${payment.isoDate}`} onClick={() => navigate("/calendar")} className="rounded-xl bg-secondary/55 p-3 text-left transition-colors hover:bg-secondary"><p className="text-xs text-muted-foreground">{payment.label} · {payment.rule}</p><p className="number mt-0.5 font-semibold">{formatDate(payment.date)}</p>{payment.shifted && <p className="mt-1 text-[11px] text-muted-foreground">перенос: {payment.shiftReason?.toLowerCase()}</p>}</button>)}</div>
             <div className="grid gap-6 py-2 sm:grid-cols-2">
-              <Metric label="Ожидаемый остаток в ₽" value={money(calc.forecastAfterSalary)} note={calc.forecastAfterSalary >= 0 ? "По текущему плану денег хватает" : "Нужно пересмотреть траты или даты платежей"} tone={calc.forecastAfterSalary >= 0 ? "good" : "danger"} />
+              <Metric label="Ожидаемый остаток в ₽" value={money(salaryForecast.forecast)} note={salaryForecast.forecast >= 0 ? "По текущему плану денег хватает" : "Нужно пересмотреть траты или даты платежей"} tone={salaryForecast.forecast >= 0 ? "good" : "danger"} />
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Точно до зарплаты</span><span className="number font-medium">{money(calc.knownBeforeSalary)}</span></div>
-                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Возможные платежи</span><span className="number font-medium">{money(calc.possibleBeforeSalary)}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Точно до зарплаты</span><span className="number font-medium">{money(salaryForecast.known)}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Возможные платежи</span><span className="number font-medium">{money(salaryForecast.possible)}</span></div>
                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">План на жизнь в день</span><span className="number font-medium">{money(calc.dailyVariable)}</span></div>
               </div>
             </div>
             {(missingDates > 0 || unsetEnvelopes > 0) && <div className="mt-5 rounded-xl bg-secondary/70 p-4 text-sm"><span className="font-medium">Прогноз можно уточнить.</span><span className="text-muted-foreground"> {missingDates > 0 ? `У ${missingDates} платежей нет даты. ` : ""}{unsetEnvelopes > 0 ? `У ${unsetEnvelopes} конвертов нет оценки или лимита.` : ""}</span><button onClick={() => navigate("/plan")} className="mt-2 flex min-h-11 items-center gap-1 font-medium text-primary">Открыть план<ChevronRight className="h-4 w-4" /></button></div>}
-          </Section>
+          </Section> : <Section title="Доход без фиксированных дат" description="Подходит для ежедневной, сдельной и нерегулярной оплаты. Здесь нет обратного отсчёта и прогноза «до зарплаты» — только внесённые поступления.">
+            <div className="flex items-start gap-3 rounded-xl bg-secondary/55 p-4"><CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="text-sm leading-relaxed">Записывайте доход в день получения. Запас, плановые платежи и аналитика используют фактические операции и продолжают работать.</p><p className="number mt-3 font-semibold">В этом месяце внесено: {money(calc.monthIncome)}</p></div></div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button className="min-h-11 gap-2" onClick={() => navigate("/operations?new=1&type=Доход")}><Plus className="h-4 w-4" />Добавить доход</Button><Button variant="outline" className="min-h-11" onClick={() => navigate("/data?tab=settings")}>Изменить график</Button></div>
+          </Section>}
 
           <Section title="Неприкосновенный запас" description={`${money(calc.reserveBase)} доступно для запаса при цели ${money(calc.reserveTarget)}. Общая оценка всех валют: ${money(calc.totalRub)}.`}>
             <div className="mt-7 h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${reservePercent}%` }} /></div>
@@ -148,7 +159,7 @@ export default function Dashboard() {
           </Section>
 
           <Section title="Состояние" description="Короткая запись помогает заметить закономерности без самодиагностики." action={<button onClick={() => navigate("/mood?new=1")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Записать<ArrowRight className="h-4 w-4" /></button>}>
-            {averageMood != null ? <><div className="flex items-end gap-3"><span className="editorial text-5xl font-semibold">{averageMood.toFixed(1)}</span><span className="pb-2 text-sm text-muted-foreground">/ 10 · последние записи</span></div><div className="mt-5 space-y-3">{data.moods.slice(0, 3).map((m) => <button key={m.id} onClick={() => navigate("/mood")} className="flex min-h-11 w-full items-center justify-between gap-3 border-b pb-3 text-left last:border-0"><span><span className="block text-sm font-medium">{m.emotion}</span><span className="text-xs text-muted-foreground">{formatDate(m.entryDate)} · {m.topic}</span></span><span className="number text-lg font-semibold">{m.mood}</span></button>)}</div></> : <EmptyState title="Дневник готов к первой записи" text="Дата, настроение, эмоция и тема — остальное только если есть силы." action={<Button variant="outline" onClick={() => navigate("/mood?new=1")} className="min-h-11">Сделать запись</Button>} />}
+            {averageMood != null ? <><div className="flex items-end gap-3"><span className="editorial text-5xl font-semibold">{averageMood.toFixed(1)}</span><span className="pb-2 text-sm text-muted-foreground">/ 10 · последние записи</span></div><div className="mt-5 space-y-3">{data.moods.slice(0, 3).map((m) => <button key={m.id} onClick={() => navigate("/mood")} className="flex min-h-11 w-full items-center justify-between gap-3 border-b pb-3 text-left last:border-0"><span><span className="block text-sm font-medium">{m.emotion}</span><span className="text-xs text-muted-foreground">{formatDate(m.entryDate)} · {m.topic}</span></span><span className="number text-lg font-semibold">{m.mood}</span></button>)}</div></> : <EmptyState title="Дневник готов к первой записи" text="Достаточно даты, настроения, эмоции и темы — детали можно добавить позже." action={<Button variant="outline" onClick={() => navigate("/mood?new=1")} className="min-h-11">Сделать запись</Button>} />}
           </Section>
         </div>
 

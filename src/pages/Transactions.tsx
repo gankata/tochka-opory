@@ -831,7 +831,7 @@ export default function Transactions() {
               className="field-area"
               value={form.note}
               onChange={(event) => setForm({ ...form, note: event.target.value })}
-              placeholder={`Необязательно${form.currency !== "RUB" ? ` · ${currencyDefinition(form.currency).name}` : ""}`}
+              placeholder={`По желанию${form.currency !== "RUB" ? ` · ${currencyDefinition(form.currency).name}` : ""}`}
             />
           </Field>
           <div className="flex flex-col-reverse gap-2 border-t pt-4 sm:flex-row sm:justify-end">

@@ -1,12 +1,13 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
-import { ArrowLeftRight, BookOpen, CalendarDays, ChartNoAxesCombined, ChevronDown, Cloud, CloudOff, DatabaseBackup, HeartPulse, Landmark, LayoutDashboard, LogOut, MoreHorizontal, Search, WalletCards } from "lucide-react";
+import { ArrowLeftRight, BookOpen, CalendarDays, ChartNoAxesCombined, ChevronDown, CircleHelp, Cloud, CloudOff, DatabaseBackup, HeartPulse, Landmark, LayoutDashboard, LogOut, MoreHorizontal, Search, WalletCards } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
 import { ThemeSwitcher } from "@/components/app/ThemeSwitcher";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 const GlobalSearch = lazy(() => import("@/components/app/GlobalSearch"));
+const AppGuide = lazy(() => import("@/components/app/AppGuide"));
 
 const navigation = [
   { to: "/", label: "Сегодня", icon: LayoutDashboard },
@@ -23,7 +24,7 @@ const mobilePrimary = navigation.filter(({ to }) => ["/", "/operations", "/mood"
 const mobileSecondary = navigation.filter(({ to }) => ["/analytics", "/calendar", "/plan", "/assets", "/data"].includes(to));
 
 function Brand() {
-  return <div className="flex items-center gap-3"><svg width="29" height="29" viewBox="0 0 29 29" fill="none" aria-hidden="true"><path d="M5 20.5C10.5 19.8 15.8 14.7 20.8 6.5M8.5 8.5c4.5.2 7.2 2.1 8.1 5.8-4.2 1.1-7.1-.7-8.1-5.8Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 24h21" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg><div><div className="font-semibold leading-none tracking-tight">точка опоры</div><div className="mt-1.5 text-[11px] uppercase tracking-[.14em] opacity-60">деньги · состояние</div></div></div>;
+  return <div className="flex items-center gap-3"><svg width="29" height="29" viewBox="0 0 29 29" fill="none" aria-hidden="true"><path d="M5 20.5C10.5 19.8 15.8 14.7 20.8 6.5M8.5 8.5c4.5.2 7.2 2.1 8.1 5.8-4.2 1.1-7.1-.7-8.1-5.8Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 24h21" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg><div><div className="font-semibold leading-none tracking-tight">точка опоры</div><div className="mt-1.5 text-[11px] uppercase tracking-[.14em]">деньги · состояние</div></div></div>;
 }
 
 export default function AppShell({ children }: { children?: ReactNode }) {
@@ -32,6 +33,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
   const workspace = trpc.workspace.get.useQuery(undefined, { staleTime: 30_000, retry: 1 });
   const { pathname } = useLocation();
   const [searchOpen, setSearchOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
   const moreActive = mobileSecondary.some(({ to }) => pathname === to);
@@ -64,6 +66,7 @@ export default function AppShell({ children }: { children?: ReactNode }) {
           </div>
         </nav>
         <button type="button" onClick={() => setSearchOpen(true)} className="mt-5 flex min-h-12 w-full items-center gap-3 rounded-xl border border-sidebar-border/60 bg-sidebar-accent/35 px-3 text-sm text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" aria-label="Поиск и быстрые действия"><Search className="h-[18px] w-[18px]" /><span className="flex-1 text-left">Поиск</span></button>
+        <button type="button" onClick={() => setGuideOpen(true)} className="mt-2 flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-sm text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"><CircleHelp className="h-[18px] w-[18px]" /><span className="flex-1 text-left">Руководство</span></button>
       </div>
       <div className="mt-4 space-y-4">
         <ThemeSwitcher />
@@ -102,8 +105,10 @@ export default function AppShell({ children }: { children?: ReactNode }) {
             return <NavLink key={item.to} to={item.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => `flex min-h-16 items-center gap-3 rounded-2xl border px-4 text-sm font-medium transition-colors ${isActive ? "border-primary/25 bg-primary/10 text-primary" : "bg-secondary/45 text-foreground hover:bg-secondary"}`}><Icon className="h-5 w-5 shrink-0" /><span>{item.label}</span></NavLink>;
           })}
         </nav>
+        <button type="button" onClick={() => { setMoreOpen(false); setGuideOpen(true); }} className="mx-4 mt-3 flex min-h-12 w-[calc(100%-2rem)] items-center justify-center gap-2 rounded-2xl border bg-card px-4 text-sm font-medium text-foreground hover:bg-secondary"><CircleHelp className="h-5 w-5 text-primary" />Открыть руководство</button>
       </SheetContent>
     </Sheet>
     {searchOpen ? <Suspense fallback={null}><GlobalSearch open onOpenChange={setSearchOpen} data={workspace.data} /></Suspense> : null}
+    <Suspense fallback={null}><AppGuide key={guideOpen ? "manual" : "automatic"} open={guideOpen} onOpenChange={setGuideOpen} /></Suspense>
   </div>;
 }

@@ -39,6 +39,8 @@ export const appSettings = sqliteTable("appSettings", {
   usdRate: money("usdRate").notNull().default(83.25),
   reserveMonths: integer("reserveMonths").notNull().default(3),
   salaryDay: integer("salaryDay").notNull().default(15),
+  secondSalaryDay: integer("secondSalaryDay"),
+  incomeSchedule: text("incomeSchedule", { enum: ["twice", "monthly", "irregular"] }).notNull().default("twice"),
   mode: text("mode", { enum: ["Обычный", "Экономия"] }).notNull().default("Обычный"),
   savingPercent: integer("savingPercent").notNull().default(30),
   trackingDays: integer("trackingDays").notNull().default(14),

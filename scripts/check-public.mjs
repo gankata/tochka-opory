@@ -31,7 +31,7 @@ const problems = [];
 
 async function candidateFiles() {
   try {
-    const output = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" });
+    const output = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8" });
     return output.split("\0").filter(Boolean);
   } catch {
     const files = [];

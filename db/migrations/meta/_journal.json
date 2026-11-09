@@ -43,6 +43,13 @@
       "when": 1794048043438,
       "tag": "0005_demonic_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794257959831,
+      "tag": "0006_yellow_christian_walker",
+      "breakpoints": true
     }
   ]
 }

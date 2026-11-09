@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/app/Common";
 import { useAuth } from "@/hooks/useAuth";
 import { trpc } from "@/providers/trpc";
+import { ONBOARDING_PENDING_KEY, writeLocalFlag } from "@/lib/app-guide";
 
 function getOAuthUrl() {
   const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
@@ -48,7 +49,10 @@ export default function Login() {
     if (!initialized && password.length < 10) { setError("Пароль должен содержать не менее 10 символов"); return; }
     try {
       if (initialized) await login.mutateAsync({ username, password });
-      else await setup.mutateAsync({ username, password });
+      else {
+        await setup.mutateAsync({ username, password });
+        writeLocalFlag(ONBOARDING_PENDING_KEY, "1");
+      }
       await utils.invalidate();
       navigate("/", { replace: true });
     } catch (cause) {

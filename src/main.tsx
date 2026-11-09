@@ -16,6 +16,7 @@ function ThemedToaster() {
       position="top-center"
       richColors
       closeButton
+      toastOptions={{ closeButtonAriaLabel: "Закрыть уведомление" }}
       theme={resolvedTheme === "dark" ? "dark" : "light"}
     />
   );

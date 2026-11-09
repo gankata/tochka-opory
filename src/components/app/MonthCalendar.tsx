@@ -72,14 +72,17 @@ export function MonthCalendar({
         const isToday = today === day;
         const nonWorking = markNonWorking && !isRussianWorkingDay(date);
         const fullDate = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric", weekday: "long" }).format(date);
+        const descriptionId = dayLabel ? `calendar-day-${day}-description` : undefined;
         return <button
           type="button"
           key={day}
           onClick={() => onSelectDay(day)}
-          aria-label={dayLabel?.(day) ?? fullDate}
+          aria-label={dayLabel ? undefined : fullDate}
+          aria-describedby={descriptionId}
           aria-pressed={selected}
           className={`relative flex min-w-0 flex-col items-stretch overflow-hidden rounded-xl border text-left transition-colors ${compact ? "min-h-14 p-1.5 sm:min-h-[4.5rem] sm:p-2" : "min-h-[4.6rem] p-1.5 sm:min-h-[6.4rem] sm:p-2.5"} ${selected ? "border-primary bg-primary/10 shadow-sm" : isToday ? "border-primary/45 bg-card hover:bg-primary/5" : "border-transparent bg-secondary/35 hover:border-border hover:bg-secondary/65"} ${dayClassName?.(day) ?? ""}`}
         >
+          {dayLabel && <span id={descriptionId} className="sr-only">{dayLabel(day)}</span>}
           <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold sm:h-7 sm:w-7 sm:text-sm ${selected ? "bg-primary text-primary-foreground" : nonWorking ? "text-muted-foreground/65" : "text-foreground"}`}>
             {date.getDate()}
           </span>

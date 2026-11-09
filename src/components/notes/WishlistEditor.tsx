@@ -42,7 +42,7 @@ export default function WishlistEditor({ items, onChange }: { items: WishlistIte
     <form onSubmit={add} className="mt-5 grid gap-2 rounded-xl bg-card p-3 sm:grid-cols-2 xl:grid-cols-[1fr_160px]">
       <input required aria-label="Название желания" className="field sm:col-span-2 xl:col-span-1" placeholder="Что хочется?" value={title} onChange={(event) => setTitle(event.target.value)} />
       <input type="number" min="0" step="0.01" aria-label="Примерная стоимость" className="field" placeholder="Цена, ₽" value={price} onChange={(event) => setPrice(event.target.value)} />
-      <input type="url" aria-label="Ссылка на желание" className="field sm:col-span-2" placeholder="Ссылка (необязательно)" value={url} onChange={(event) => setUrl(event.target.value)} />
+      <input type="url" aria-label="Ссылка на желание" className="field sm:col-span-2" placeholder="Ссылка, если есть" value={url} onChange={(event) => setUrl(event.target.value)} />
       <Button className="min-h-11 gap-2 sm:col-span-2 sm:justify-self-start"><Plus className="h-4 w-4" />Добавить желание</Button>
     </form>
     <div className="mt-4 space-y-3">

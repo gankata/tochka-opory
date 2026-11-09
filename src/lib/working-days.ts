@@ -103,9 +103,12 @@ export function lastRussianWorkingDay(year: number, monthIndex: number) {
   return previousRussianWorkingDay(new Date(year, monthIndex + 1, 0, 12));
 }
 
+import type { IncomeScheduleConfig } from "@contracts/incomeSchedule";
+
 export type SalaryPayment = {
   kind: "first" | "last";
   label: string;
+  rule: string;
   date: Date;
   isoDate: string;
   nominalDate: Date;
@@ -115,40 +118,76 @@ export type SalaryPayment = {
   officialCalendar: boolean;
 };
 
-export function salaryDatesForMonth(year: number, monthIndex: number, salaryDay = 15): SalaryPayment[] {
-  const lastCalendarDay = new Date(year, monthIndex + 1, 0, 12).getDate();
-  const safeDay = Math.max(1, Math.min(lastCalendarDay, Math.round(salaryDay)));
-  const firstNominal = new Date(year, monthIndex, safeDay, 12);
-  const lastNominal = new Date(year, monthIndex, lastCalendarDay, 12);
-  const first = previousRussianWorkingDay(firstNominal);
-  const last = previousRussianWorkingDay(lastNominal);
-  const firstReason = russianNonWorkingReason(firstNominal);
-  const lastReason = russianNonWorkingReason(lastNominal);
+function paymentForNominalDate(
+  kind: SalaryPayment["kind"],
+  label: string,
+  rule: string,
+  nominalDate: Date,
+): SalaryPayment {
+  const date = previousRussianWorkingDay(nominalDate);
+  const shiftReason = russianNonWorkingReason(nominalDate);
+  return {
+    kind,
+    label,
+    rule,
+    date,
+    isoDate: dateToISO(date),
+    nominalDate,
+    nominalIsoDate: dateToISO(nominalDate),
+    shifted: shiftReason !== null,
+    shiftReason,
+    officialCalendar: hasOfficialRussianCalendar(date.getFullYear()),
+  };
+}
 
-  return [
-    {
-      kind: "first",
-      label: "Первая зарплата",
-      date: first,
-      isoDate: dateToISO(first),
-      nominalDate: firstNominal,
-      nominalIsoDate: dateToISO(firstNominal),
-      shifted: firstReason !== null,
-      shiftReason: firstReason,
-      officialCalendar: hasOfficialRussianCalendar(first.getFullYear()),
-    },
-    {
-      kind: "last",
-      label: "Вторая зарплата",
-      date: last,
-      isoDate: dateToISO(last),
-      nominalDate: lastNominal,
-      nominalIsoDate: dateToISO(lastNominal),
-      shifted: lastReason !== null,
-      shiftReason: lastReason,
-      officialCalendar: hasOfficialRussianCalendar(last.getFullYear()),
-    },
-  ];
+export function incomeDatesForMonth(year: number, monthIndex: number, config: IncomeScheduleConfig): SalaryPayment[] {
+  if (config.incomeSchedule === "irregular") return [];
+  const lastCalendarDay = new Date(year, monthIndex + 1, 0, 12).getDate();
+  const safeDay = (day: number) => Math.max(1, Math.min(lastCalendarDay, Math.round(day)));
+  const firstDay = Math.round(config.salaryDay);
+  const payments = [paymentForNominalDate(
+    "first",
+    config.incomeSchedule === "monthly" ? "Зарплата" : "Первая зарплата",
+    `${firstDay}-е число`,
+    new Date(year, monthIndex, safeDay(firstDay), 12),
+  )];
+  if (config.incomeSchedule === "twice") {
+    if (config.secondSalaryDay == null) {
+      payments.push(paymentForNominalDate(
+        "last",
+        "Вторая зарплата",
+        "последний рабочий день",
+        new Date(year, monthIndex, lastCalendarDay, 12),
+      ));
+    } else {
+      const secondDay = Math.round(config.secondSalaryDay);
+      payments.push(paymentForNominalDate(
+        "last",
+        "Вторая зарплата",
+        `${secondDay}-е число`,
+        new Date(year, monthIndex, safeDay(secondDay), 12),
+      ));
+    }
+  }
+  return payments;
+}
+
+export function salaryDatesForMonth(year: number, monthIndex: number, salaryDay = 15): SalaryPayment[] {
+  return incomeDatesForMonth(year, monthIndex, { incomeSchedule: "twice", salaryDay, secondSalaryDay: null });
+}
+
+export function upcomingIncomePayments(config: IncomeScheduleConfig, from = new Date(), count = 2) {
+  if (config.incomeSchedule === "irregular" || count <= 0) return [];
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0);
+  const candidates: SalaryPayment[] = [];
+  for (let offset = 0; offset <= 3; offset += 1) {
+    const month = new Date(from.getFullYear(), from.getMonth() + offset, 1, 12);
+    candidates.push(...incomeDatesForMonth(month.getFullYear(), month.getMonth(), config));
+  }
+  return candidates
+    .filter((payment) => payment.date >= start)
+    .sort((a, b) => a.date.getTime() - b.date.getTime())
+    .slice(0, count);
 }
 
 export function nextSalaryPayment(salaryDay: number, from = new Date()) {
@@ -156,14 +195,5 @@ export function nextSalaryPayment(salaryDay: number, from = new Date()) {
 }
 
 export function upcomingSalaryPayments(salaryDay: number, from = new Date(), count = 2) {
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0);
-  const candidates: SalaryPayment[] = [];
-  for (let offset = 0; offset <= 3; offset += 1) {
-    const month = new Date(from.getFullYear(), from.getMonth() + offset, 1, 12);
-    candidates.push(...salaryDatesForMonth(month.getFullYear(), month.getMonth(), salaryDay));
-  }
-  return candidates
-    .filter((payment) => payment.date >= start)
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .slice(0, count);
+  return upcomingIncomePayments({ incomeSchedule: "twice", salaryDay, secondSalaryDay: null }, from, count);
 }

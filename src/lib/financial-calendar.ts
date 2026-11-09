@@ -1,6 +1,6 @@
 import { normalizeOperationCategory } from "@contracts/operationCategories";
 import type { Payment, Transaction, Workspace } from "@/types";
-import { dateToISO, salaryDatesForMonth, type SalaryPayment } from "@/lib/working-days";
+import { dateToISO, incomeDatesForMonth, type SalaryPayment } from "@/lib/working-days";
 import { paymentAmount, roundMoney } from "@/lib/utils-app";
 
 export type FinancialEventKind = "income" | "expense" | "exchange" | "payment" | "salary";
@@ -75,7 +75,7 @@ export function buildFinancialCalendar(data: Workspace, month: string, today = d
     }];
   });
 
-  const salaries = data.settings ? salaryDatesForMonth(year, monthNumber - 1, data.settings.salaryDay) : [];
+  const salaries = data.settings ? incomeDatesForMonth(year, monthNumber - 1, data.settings) : [];
   const salaryEvents: FinancialEvent[] = salaries.map((salary) => ({
     id: `salary-${salary.kind}-${salary.isoDate}`,
     date: salary.isoDate,
