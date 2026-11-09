@@ -14,6 +14,10 @@ export const parseDecimal = (value: string) => value.trim() === "" ? Number.NaN 
 export const parseDay = (value: string) => new Date(`${value}T12:00:00`);
 export const money = (value: number, currency = "₽") => `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value)} ${currency}`;
 
+export function positiveForeignBalances<T extends { code: string; amount: number }>(balances: T[]): T[] {
+  return balances.filter((balance) => balance.code !== "RUB" && roundMoney(balance.amount) > 0);
+}
+
 export type Transaction = Workspace["transactions"][number];
 
 export function operationCurrency(transaction: Transaction) {

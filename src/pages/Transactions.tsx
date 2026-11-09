@@ -166,7 +166,6 @@ export default function Transactions() {
   const [search, setSearch] = useState("");
   const [type, setType] = useState("Все");
   const [currencyFilter, setCurrencyFilter] = useState("Все");
-  const [month, setMonth] = useState("");
   const [visibleLimit, setVisibleLimit] = useState(50);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkCategory, setBulkCategory] = useState("");
@@ -200,7 +199,7 @@ export default function Transactions() {
       const requestedType = params.get("type");
       const operationType: OperationType = requestedType === "Доход" || requestedType === "Обмен" ? requestedType : "Расход";
       setEditing(null);
-      setForm({ ...emptyForm(params.get("date") || todayISO()), type: operationType });
+      setForm({ ...emptyForm(params.get("date") || todayISO()), type: operationType, currency: operationType === "Обмен" ? "USD" : "RUB" });
       setOpen(true);
     }
   }, [params]);
@@ -320,11 +319,9 @@ export default function Transactions() {
             .toLocaleLowerCase("ru-RU")
             .includes(normalizedSearch)) &&
         (type === "Все" || transaction.type === type) &&
-        (currencyFilter === "Все" ||
-          operationCurrency(transaction) === currencyFilter) &&
-        (!month || transaction.operationDate.startsWith(month)),
+        (currencyFilter === "Все" || operationCurrency(transaction) === currencyFilter),
     );
-  }, [data, search, type, currencyFilter, month, params]);
+  }, [data, search, type, currencyFilter, params]);
 
   if (query.isLoading) return <LoadingPage />;
   if (query.isError || !data) return <ErrorPage retry={() => query.refetch()} />;
@@ -434,7 +431,7 @@ export default function Transactions() {
       />
       {offlineCount > 0 && <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm" role="status">В очереди этого браузера: {offlineCount}. Не очищайте данные сайта до синхронизации. Очередь не переносится сама на другое устройство.</div>}
 
-      <div className="mb-5 grid gap-3 rounded-2xl bg-secondary/55 p-4 md:grid-cols-2 md:items-end xl:grid-cols-[minmax(180px,1fr)_140px_140px_160px_auto]">
+      <div className="mb-5 grid gap-3 rounded-2xl bg-secondary/55 p-4 md:grid-cols-2 md:items-end xl:grid-cols-[minmax(220px,1fr)_160px_160px_auto]">
         <label className="relative block md:col-span-2 xl:col-span-1">
           <span className="sr-only">Поиск операций</span>
           <Search className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-muted-foreground" />
@@ -448,6 +445,7 @@ export default function Transactions() {
         <label>
           <span className="sr-only">Тип операции</span>
           <select
+            aria-label="Тип операции"
             value={type}
             onChange={(event) => setType(event.target.value)}
             className="field"
@@ -461,6 +459,7 @@ export default function Transactions() {
         <label>
           <span className="sr-only">Валюта операции</span>
           <select
+            aria-label="Валюта операции"
             value={currencyFilter}
             onChange={(event) => setCurrencyFilter(event.target.value)}
             className="field"
@@ -472,15 +471,6 @@ export default function Transactions() {
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          <span className="sr-only">Месяц</span>
-          <input
-            type="month"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-            className="field"
-          />
         </label>
         <Button
           variant="outline"
@@ -502,12 +492,11 @@ export default function Transactions() {
         <span className="text-muted-foreground">
           Расход: <b className="number">−{money(filteredExpense)}</b>
         </span>
-        {(search || month || type !== "Все" || currencyFilter !== "Все" || params.has("focus")) && (
+        {(search || type !== "Все" || currencyFilter !== "Все" || params.has("focus")) && (
           <button
             className="min-h-11 font-medium text-primary"
             onClick={() => {
               setSearch("");
-              setMonth("");
               setType("Все");
               setCurrencyFilter("Все");
               if (params.has("focus")) setParams({});

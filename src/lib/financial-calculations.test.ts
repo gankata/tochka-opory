@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Envelope, Goal, Payment, Settings, Transaction, Workspace } from "@/types";
-import { calculateWorkspace, parseDecimal, roundMoney } from "@/lib/utils-app";
+import { calculateWorkspace, parseDecimal, positiveForeignBalances, roundMoney } from "@/lib/utils-app";
 
 const now = new Date(2026, 10, 2, 12);
 const stamps = { createdAt: new Date("2026-11-01T12:00:00"), updatedAt: new Date("2026-11-01T12:00:00") };
@@ -196,6 +196,44 @@ describe("финансовые расчёты", () => {
     expect(result.bookRub).toBe(1750);
     expect(result.bookUsd).toBe(100);
     expect(result.totalRub).toBe(9750);
+  });
+
+  it("показывает только иностранные валюты с положительным остатком", () => {
+    const result = calculateWorkspace(workspace({
+      settings: settings({
+        cashUsd: 120,
+        currencyRates: { EUR: 90, GBP: 100 },
+        currencyBalances: { EUR: 25.5, GBP: 0 },
+      }),
+    }), now);
+
+    expect(positiveForeignBalances(result.currencyBalances).map((balance) => balance.code)).toEqual(["USD", "EUR"]);
+    expect(positiveForeignBalances([
+      { code: "RUB", amount: 1000 },
+      { code: "USD", amount: -5 },
+      { code: "EUR", amount: 0.001 },
+      { code: "GBP", amount: 0 },
+      { code: "JPY", amount: 10 },
+    ]).map((balance) => balance.code)).toEqual(["JPY"]);
+  });
+
+  it("скрывает полностью обменянную валюту и сохраняет операцию в журнале", () => {
+    const result = calculateWorkspace(workspace({
+      settings: settings({ cashRub: 1000, cashUsd: 100 }),
+      transactions: [transaction(1, "Обмен", 8000, "2026-11-02", {
+        category: "Продажа валюты",
+        currency: "USD",
+        originalAmount: -100,
+        amountUsd: -100,
+        exchangeRate: 80,
+      })],
+    }), now);
+
+    expect(result.bookUsd).toBe(0);
+    expect(result.bookRub).toBe(9000);
+    expect(positiveForeignBalances(result.currencyBalances)).toEqual([]);
+    expect(result.actualTransactions).toHaveLength(1);
+    expect(result.actualTransactions[0]).toMatchObject({ type: "Обмен", category: "Продажа валюты", originalAmount: -100 });
   });
 });
 

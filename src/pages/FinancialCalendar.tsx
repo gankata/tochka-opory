@@ -61,7 +61,7 @@ function EventRow({ event }: { event: FinancialEvent }) {
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
         {event.kind === "income" || event.kind === "expense" || event.kind === "exchange" ? <CategoryBadge name={event.title} /> : <h3 className="font-medium">{event.title}</h3>}
-        <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">{event.kind === "payment" ? "План, не списано" : event.kind === "salary" ? "Плановая дата" : event.future ? "Запланировано" : "Внесено"}</span>
+        <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-foreground">{event.kind === "payment" ? "План, не списано" : event.kind === "salary" ? "Плановая дата" : event.future ? "Запланировано" : "Внесено"}</span>
       </div>
       {event.kind === "payment" && <p className="mt-1.5 text-xs text-muted-foreground">{event.payment.required ? "Обязательный" : "Регулярный"} платёж · раз в {event.payment.intervalMonths} мес.</p>}
       {event.kind === "salary" && <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{event.salary.kind === "first" ? "Правило: 15-е число" : "Правило: последний рабочий день"}{event.salary.shifted ? ` · перенос с ${formatDate(event.salary.nominalDate)}: ${event.salary.shiftReason?.toLowerCase()}` : ""}. Сумма не добавляется к доходу.</p>}

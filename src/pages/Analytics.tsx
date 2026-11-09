@@ -22,7 +22,6 @@ import {
   ChevronDown,
   Download,
   Plus,
-  Bookmark,
   Table2,
   TrendingDown,
   TrendingUp,
@@ -58,6 +57,7 @@ import {
 import { buildCashFlowForecast } from "@/lib/cash-flow";
 import type { Workspace } from "@/types";
 import { DatePicker } from "@/components/app/DatePicker";
+import AnalyticsSavedViews from "@/components/app/AnalyticsSavedViews";
 import {
   Button,
 } from "@/components/ui/button";
@@ -272,11 +272,6 @@ function CashFlowForecast({ data }: { data: Workspace }) {
   </Section>;
 }
 
-type SavedAnalyticsView = { id: string; name: string; kind: AnalyticsKind; period: AnalyticsPeriod; group: AnalyticsGroup; customStart: string; customEnd: string };
-function readSavedViews(): SavedAnalyticsView[] {
-  try { const value = JSON.parse(localStorage.getItem("tochka-analytics-views") ?? "[]"); return Array.isArray(value) ? value : []; } catch { return []; }
-}
-
 export default function Analytics() {
   const query = trpc.workspace.get.useQuery();
   const navigate = useNavigate();
@@ -287,7 +282,6 @@ export default function Analytics() {
   const [customStart, setCustomStart] = useState(() => todayISO());
   const [customEnd, setCustomEnd] = useState(() => todayISO());
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [savedViews, setSavedViews] = useState<SavedAnalyticsView[]>(readSavedViews);
   const data = query.data;
 
   const range = useMemo(() => data ? resolveAnalyticsRange(period, data.transactions, todayISO(), customStart, customEnd) : null, [data, period, customStart, customEnd]);
@@ -336,11 +330,11 @@ export default function Analytics() {
 
   const noun = kind === "expense" ? "расходов" : "доходов";
   const changeTone = model.change === 0 ? "default" : kind === "expense" ? model.change > 0 ? "danger" : "good" : model.change > 0 ? "good" : "danger";
-  const comparisonValue = model.previousTotal === 0 ? "Нет базы" : `${model.changePercent! > 0 ? "+" : ""}${percent.format(model.changePercent!)}%`;
+  const comparisonValue = model.previousTotal === 0 ? "Нет сравнения" : `${model.changePercent! > 0 ? "+" : ""}${percent.format(model.changePercent!)}%`;
   const maxGroupWarning = !analyticsGroupAvailable(range, group);
 
   return <div className="page-enter">
-    <PageHeader eyebrow="Финансовая аналитика" title="Закономерности в ваших деньгах" description="Сравнивайте периоды, изучайте динамику и раскрывайте категории до отдельных операций. Все суммы — в рублях по курсу на дату записи." action={<Button variant="outline" onClick={exportCsv} disabled={!model.count} className="min-h-11 w-full gap-2 sm:w-auto"><Download className="h-4 w-4" />Экспорт CSV</Button>} />
+    <PageHeader eyebrow="Финансовая аналитика" title="Закономерности в ваших деньгах" description="Изучайте внесённые операции по периодам и категориям. Старая история необязательна: аналитика показывает только имеющиеся записи и не оценивает пропущенные траты. Суммы — в рублях по курсу на дату записи." action={<Button variant="outline" onClick={exportCsv} disabled={!model.count} className="min-h-11 w-full gap-2 sm:w-auto"><Download className="h-4 w-4" />Экспорт CSV</Button>} />
 
     <section className="surface mb-5 p-4 sm:p-5" aria-label="Фильтры аналитики">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -350,7 +344,22 @@ export default function Analytics() {
         </div>
         <div className="flex flex-wrap gap-1.5" aria-label="Период аналитики">{periodOptions.map((option) => <button key={option.value} type="button" onClick={() => changePeriod(option.value)} aria-pressed={period === option.value} className={`min-h-11 rounded-lg px-3 text-sm font-medium ${period === option.value ? "bg-primary text-primary-foreground" : "bg-secondary/60 text-muted-foreground hover:bg-secondary hover:text-foreground"}`}>{option.label}</button>)}</div>
       </div>
-      <div className="mt-4 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center"><Bookmark className="hidden h-4 w-4 text-primary sm:block" /><select aria-label="Сохранённые представления" className="field sm:max-w-xs" value="" onChange={(event) => { const saved = savedViews.find((item) => item.id === event.target.value); if (saved) { setKind(saved.kind); setPeriod(saved.period); setGroup(saved.group); setCustomStart(saved.customStart); setCustomEnd(saved.customEnd); setExpanded(null); } }}><option value="">Сохранённые представления…</option>{savedViews.map((saved) => <option key={saved.id} value={saved.id}>{saved.name}</option>)}</select><Button variant="outline" className="min-h-11" onClick={() => { const name = window.prompt("Название представления", `${kind === "expense" ? "Расходы" : "Доходы"} · ${periodOptions.find((item) => item.value === period)?.label}`); if (!name?.trim()) return; const next = [...savedViews, { id: crypto.randomUUID(), name: name.trim(), kind, period, group: effectiveGroup, customStart, customEnd }]; localStorage.setItem("tochka-analytics-views", JSON.stringify(next)); setSavedViews(next); toast.success("Представление сохранено на этом устройстве"); }}>Сохранить текущее</Button></div>
+      <AnalyticsSavedViews
+        kind={kind}
+        period={period}
+        group={effectiveGroup}
+        customStart={customStart}
+        customEnd={customEnd}
+        suggestedName={`${kind === "expense" ? "Расходы" : "Доходы"} · ${periodOptions.find((item) => item.value === period)?.label}`}
+        onApply={(saved) => {
+          setKind(saved.kind);
+          setPeriod(saved.period);
+          setGroup(saved.group);
+          setCustomStart(saved.customStart);
+          setCustomEnd(saved.customEnd);
+          setExpanded(null);
+        }}
+      />
       {period === "custom" && <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2 lg:max-w-2xl"><Field label="Начало периода"><DatePicker required aria-label="Начало периода" value={customStart} onChange={(value) => changeCustomDate("start", value)} /></Field><Field label="Конец периода"><DatePicker required aria-label="Конец периода" value={customEnd} onChange={(value) => changeCustomDate("end", value)} /></Field></div>}
       <div className="mt-4 flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div><p className="text-sm font-medium">Детализация динамики</p><p className="mt-0.5 text-xs text-muted-foreground">{rangeText(range)} · {range.days} {range.days === 1 ? "день" : "дн."}</p></div>
@@ -362,7 +371,7 @@ export default function Analytics() {
     <section className="surface mb-5 overflow-hidden" aria-label="Ключевые показатели">
       <div className="grid gap-px bg-border/70 sm:grid-cols-2 xl:grid-cols-4">
         <div className="bg-card p-5"><Metric label={kind === "expense" ? "Расходы за период" : "Доходы за период"} value={money(model.total)} note={rangeText(range)} /></div>
-        <div className="bg-card p-5"><Metric label="К предыдущему периоду" value={comparisonValue} note={model.previousTotal === 0 ? `За предыдущие ${range.days} дн. сумма была 0 ₽` : `${model.change >= 0 ? "+" : "−"}${money(Math.abs(model.change))} · ${rangeText(model.previousRange)}`} tone={changeTone} /></div>
+        <div className="bg-card p-5"><Metric label="К предыдущему периоду" value={comparisonValue} note={model.previousTotal === 0 ? `За предыдущие ${range.days} дн. записей о ${noun} нет — процент изменения не рассчитывается` : `${model.change >= 0 ? "+" : "−"}${money(Math.abs(model.change))} · ${rangeText(model.previousRange)}`} tone={changeTone} /></div>
         <div className="bg-card p-5"><Metric label="В среднем в месяц" value={money(model.monthlyAverage)} note="Итог делится на календарные месяцы диапазона" /></div>
         <div className="bg-card p-5"><Metric label="Средний чек" value={money(model.average)} note={`${model.count} ${operationWord(model.count)} · в прошлом периоде ${model.previousCount}`} /></div>
       </div>

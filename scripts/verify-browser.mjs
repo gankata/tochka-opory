@@ -83,6 +83,7 @@ try {
   const badResponses = [];
   page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("dialog", (nativeDialog) => { errors.push(`Unexpected native ${nativeDialog.type()} dialog`); void nativeDialog.dismiss(); });
   page.on("response", (response) => { if (response.status() >= 400) badResponses.push(`${response.status()} ${response.url()}`); });
 
   await page.goto(origin, { waitUntil: "networkidle" });
@@ -94,6 +95,42 @@ try {
   await page.getByRole("button", { name: "Создать вход и продолжить", exact: true }).click();
   await page.waitForURL(`${origin}/`);
   await page.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
+  if (await page.getByRole("heading", { name: "Иностранная валюта", exact: true }).count()) throw new Error("A new user must not see an empty foreign currency section");
+  if (await page.locator("[data-currency]").count()) throw new Error("A new user must not see empty currency cards");
+
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  await page.getByLabel("Наличные, $", { exact: true }).fill("100");
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.locator('[data-currency="USD"]').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-currency="USD"]')?.textContent?.includes("100"));
+  await page.screenshot({ path: path.join(output, "dashboard-currency-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+
+  await page.goto(`${origin}/operations?new=1&type=${encodeURIComponent("Обмен")}`, { waitUntil: "networkidle" });
+  const exchangeDialog = page.getByRole("dialog", { name: "Новая операция", exact: true });
+  await exchangeDialog.waitFor();
+  await exchangeDialog.getByRole("combobox", { name: "Категория", exact: true }).click();
+  await page.getByRole("option", { name: "Обмен валюты", exact: true }).click();
+  await exchangeDialog.locator('select:has(option[value="sell"])').selectOption("sell");
+  await exchangeDialog.locator('input[type="number"]').nth(0).fill("100");
+  await exchangeDialog.locator('input[type="number"]').nth(1).fill("8000");
+  await exchangeDialog.getByLabel("Комментарий", { exact: true }).fill("Проверочный полный обмен");
+  await exchangeDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await page.waitForTimeout(400);
+  if (await exchangeDialog.isVisible()) {
+    const details = JSON.stringify({ dialog: await exchangeDialog.innerText(), body: await page.locator("body").innerText(), errors, badResponses, serverLogs });
+    await page.screenshot({ path: path.join(output, "exchange-failure.jpg"), type: "jpeg", quality: 90, fullPage: true });
+    throw new Error(`Exchange was not saved: ${details}`);
+  }
+  await exchangeDialog.waitFor({ state: "hidden" });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  await page.getByRole("heading", { name: "Иностранная валюта", exact: true }).waitFor({ state: "hidden" });
+  await page.locator("[data-currency]").first().waitFor({ state: "hidden" });
+  await page.screenshot({ path: path.join(output, "dashboard-after-full-exchange-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
+  await page.getByText("Проверочный полный обмен", { exact: true }).first().waitFor();
+
   errors.length = 0;
   badResponses.length = 0;
 
@@ -117,6 +154,12 @@ try {
   ];
   for (const [route, name] of routes) {
     await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
+    if (route === "/operations") {
+      await page.getByLabel("Поиск операций", { exact: true }).waitFor();
+      if (await page.getByLabel("Поиск операций", { exact: true }).count() !== 1) throw new Error("Journal should contain exactly one main search field");
+      if (await page.getByLabel("Месяц", { exact: true }).count()) throw new Error("Small month field next to CSV should be removed");
+    }
+    if (route === "/analytics") await page.getByText("Нет сравнения", { exact: true }).waitFor();
     await assertAccessible(page, `${name}-empty-desktop`);
     await page.screenshot({ path: path.join(output, `${name}-desktop.jpg`), type: "jpeg", quality: 82, fullPage: true });
     const metrics = await page.evaluate(() => ({
@@ -167,12 +210,95 @@ try {
   await incomeDialog.waitFor({ state: "hidden" });
 
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
-  await page.getByRole("link", { name: "Аналитика", exact: true }).click();
+  const journalSearch = page.getByLabel("Поиск операций", { exact: true });
+  await journalSearch.fill("Счета за квартиру");
+  await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1);
+  await page.locator("tbody tr").filter({ hasText: "Коммуналка" }).waitFor();
+  await journalSearch.fill("Запись, которой нет");
+  await page.getByText("Операции не найдены", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Сбросить фильтры", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll("tbody tr").length > 1);
+  if (await journalSearch.inputValue()) throw new Error("Reset filters should clear the main journal search");
+  await page.getByLabel("Тип операции", { exact: true }).selectOption("Доход");
+  await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1 && document.querySelector("tbody tr")?.textContent?.includes("Зарплата"));
+  await page.getByRole("button", { name: "Сбросить фильтры", exact: true }).click();
+  await page.getByLabel("Валюта операции", { exact: true }).selectOption("USD");
+  await page.waitForFunction(() => document.querySelectorAll("tbody tr").length === 1 && document.querySelector("tbody tr")?.textContent?.includes("Обмен"));
+  await page.getByRole("button", { name: "Сбросить фильтры", exact: true }).click();
+  await page.waitForFunction(() => document.querySelectorAll("tbody tr").length > 1);
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: path.join(output, "operations-main-search-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+
+  const desktopNav = page.getByRole("navigation", { name: "Основная навигация", exact: true });
+  if (await desktopNav.locator("a:visible, button:visible").count() !== 5) throw new Error("Desktop navigation should contain four primary links and More");
+  await desktopNav.getByRole("button", { name: "Ещё", exact: true }).click();
+  await page.screenshot({ path: path.join(output, "desktop-more.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await desktopNav.getByRole("link", { name: "Аналитика", exact: true }).click();
   await page.waitForURL(`${origin}/analytics`);
   await page.getByRole("heading", { name: "Закономерности в ваших деньгах", exact: true }).waitFor();
   const analyticsSummary = page.locator('section[aria-label="Ключевые показатели"]');
   await page.waitForFunction(() => document.querySelector('section[aria-label="Ключевые показатели"]')?.textContent?.replace(/\s/g, "").includes("156540₽"));
   if (!(await analyticsSummary.innerText()).includes("Средний чек")) throw new Error("Analytics summary is incomplete");
+
+  await page.getByRole("button", { name: "Сохранить новое", exact: true }).click();
+  const saveViewDialog = page.getByRole("dialog", { name: "Сохранить представление", exact: true });
+  await saveViewDialog.waitFor();
+  await saveViewDialog.getByLabel("Название представления", { exact: true }).fill("");
+  await saveViewDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await saveViewDialog.getByText("Введите название представления.", { exact: true }).waitFor();
+  await saveViewDialog.getByLabel("Название представления", { exact: true }).fill("Мои расходы");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(output, "analytics-save-view-dialog-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await saveViewDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await saveViewDialog.waitFor({ state: "hidden" });
+  const savedViewSelect = page.getByRole("combobox", { name: "Сохранённые представления", exact: true });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Сохранённые представления"]')?.textContent?.includes("Мои расходы"));
+  await savedViewSelect.click();
+  await page.getByRole("option", { name: "Мои расходы", exact: true }).waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(output, "analytics-saved-view-list-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Переименовать представление", exact: true }).click();
+  const renameViewDialog = page.getByRole("dialog", { name: "Переименовать представление", exact: true });
+  await renameViewDialog.getByLabel("Новое название", { exact: true }).fill("Расходы за 6 месяцев");
+  await renameViewDialog.getByRole("button", { name: "Сохранить название", exact: true }).click();
+  await renameViewDialog.waitFor({ state: "hidden" });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Сохранённые представления"]')?.textContent?.includes("Расходы за 6 месяцев"));
+
+  await page.getByRole("button", { name: "12 мес.", exact: true }).click();
+  await page.getByText(/«Расходы за 6 месяцев»: фильтры изменены/).waitFor();
+  await page.getByRole("button", { name: "Вернуть сохранённые настройки", exact: true }).click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "6 мес." && button.getAttribute("aria-pressed") === "true"));
+  await page.getByRole("button", { name: "12 мес.", exact: true }).click();
+  await page.getByRole("button", { name: "Обновить сохранённое представление", exact: true }).click();
+  await page.getByRole("button", { name: "Обновить сохранённое представление", exact: true }).waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "3 мес.", exact: true }).click();
+  await savedViewSelect.click();
+  await page.getByRole("option", { name: "Расходы за 6 месяцев", exact: true }).click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "12 мес." && button.getAttribute("aria-pressed") === "true"));
+  await page.getByRole("button", { name: "3 мес.", exact: true }).click();
+  await savedViewSelect.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("option", { name: "Расходы за 6 месяцев", exact: true }).press("Enter");
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "12 мес." && button.getAttribute("aria-pressed") === "true"));
+
+  await page.reload({ waitUntil: "networkidle" });
+  await savedViewSelect.click();
+  await page.getByRole("option", { name: "Расходы за 6 месяцев", exact: true }).click();
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "12 мес." && button.getAttribute("aria-pressed") === "true"));
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: path.join(output, "analytics-active-saved-view-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.getByRole("button", { name: "Удалить представление", exact: true }).click();
+  const deleteViewDialog = page.getByRole("alertdialog", { name: "Удалить «Расходы за 6 месяцев»?", exact: true });
+  await deleteViewDialog.waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(output, "analytics-delete-saved-view-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await deleteViewDialog.getByRole("button", { name: "Удалить", exact: true }).click();
+  await deleteViewDialog.waitFor({ state: "hidden" });
+  if (!(await savedViewSelect.isDisabled())) throw new Error("Deleting the last saved view should disable the selector");
+  if (await page.evaluate(() => JSON.parse(localStorage.getItem("tochka-analytics-views") ?? "[]").length) !== 0) throw new Error("Saved view was not deleted from local storage");
+  await page.getByRole("button", { name: "6 мес.", exact: true }).click();
 
   await page.waitForTimeout(650);
   const compositionChart = page.locator(".category-composition-chart");
@@ -587,6 +713,16 @@ try {
     await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
     if (route === "/notes") await page.getByRole("button", { name: "Идеи для поездки", exact: true }).click();
     if (route === "/analytics") {
+      await page.getByRole("button", { name: "Сохранить новое", exact: true }).click();
+      const mobileSavedViewDialog = page.getByRole("dialog", { name: "Сохранить представление", exact: true });
+      await mobileSavedViewDialog.getByLabel("Название представления", { exact: true }).fill("Мобильное представление");
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: path.join(output, "analytics-save-view-dialog-mobile.jpg"), type: "jpeg", quality: 90, fullPage: false });
+      await mobileSavedViewDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+      await mobileSavedViewDialog.waitFor({ state: "hidden" });
+      await page.waitForFunction(() => document.querySelector('[aria-label="Сохранённые представления"]')?.textContent?.includes("Мобильное представление"));
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: path.join(output, "analytics-active-saved-view-mobile.jpg"), type: "jpeg", quality: 90, fullPage: true });
       await page.getByRole("button", { name: /^Еда / }).click();
       await page.getByText("Продукты на неделю", { exact: true }).last().waitFor();
       const expandedCategoryId = await page.getByRole("button", { name: /^Еда / }).getAttribute("aria-controls");
@@ -607,11 +743,11 @@ try {
   }
 
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
-  for (const [route, label] of [["/calendar", "Календарь"], ["/plan", "План"], ["/notes", "Заметки"], ["/assets", "Капитал"], ["/data", "Данные"]]) {
+  for (const [route, label] of [["/analytics", "Аналитика"], ["/calendar", "Календарь"], ["/plan", "План"], ["/assets", "Капитал"], ["/data", "Данные"]]) {
     await page.getByRole("button", { name: "Ещё", exact: true }).click();
     const morePanel = page.getByRole("dialog", { name: "Другие разделы", exact: true });
     await morePanel.waitFor();
-    if (route === "/calendar") {
+    if (route === "/analytics") {
       await page.waitForTimeout(550);
       await page.screenshot({ path: path.join(output, "mobile-more.jpg"), type: "jpeg", quality: 90, fullPage: false });
     }
@@ -619,6 +755,8 @@ try {
     await page.waitForURL(`${origin}${route}`);
     await morePanel.waitFor({ state: "hidden" });
   }
+  await mobileNav.getByRole("link", { name: "Заметки", exact: true }).click();
+  await page.waitForURL(`${origin}/notes`);
 
   for (const width of [768, 1024]) {
     await page.setViewportSize({ width, height: 900 });

@@ -7,7 +7,7 @@ const generatedDirectories = new Set([
   "node_modules", "dist", "data", ".git", ".test-data", ".test-recovery",
   ".verification", ".toolchain", ".release", ".gradle", ".android-build", "build",
 ]);
-const forbiddenFiles = new Set(["roadmap.md", "info.md", "competitive-analysis.md", "wire.jsonl"]);
+const forbiddenFiles = new Set(["roadmap.md", "work.md", "product-guide.md", "info.md", "competitive-analysis.md", "wire.jsonl"]);
 const privateExtensions = [
   ".sqlite", ".sqlite3", ".db", ".db-shm", ".db-wal", ".env", ".apk",
   ".zip", ".tar", ".gz", ".7z", ".keystore", ".jks", ".log",
