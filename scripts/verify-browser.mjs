@@ -517,13 +517,13 @@ try {
   await page.keyboard.press("ControlOrMeta+K");
   await searchDialog.locator('[data-search-action="expense"]').click();
   await page.getByRole("dialog", { name: "Новая операция", exact: true }).waitFor();
-  if (await page.getByRole("dialog", { name: "Новая операция", exact: true }).locator("select").first().inputValue() !== "Расход") throw new Error("Expense quick action has the wrong type");
+  await page.waitForFunction(() => document.querySelector('[data-slot="dialog-content"] select')?.value === "Расход");
   await page.getByRole("button", { name: "Отмена", exact: true }).click();
 
   await page.keyboard.press("ControlOrMeta+K");
   await searchDialog.locator('[data-search-action="income"]').click();
   await page.getByRole("dialog", { name: "Новая операция", exact: true }).waitFor();
-  if (await page.getByRole("dialog", { name: "Новая операция", exact: true }).locator("select").first().inputValue() !== "Доход") throw new Error("Income quick action has the wrong type");
+  await page.waitForFunction(() => document.querySelector('[data-slot="dialog-content"] select')?.value === "Доход");
   await page.getByRole("button", { name: "Отмена", exact: true }).click();
 
   await page.keyboard.press("ControlOrMeta+K");
