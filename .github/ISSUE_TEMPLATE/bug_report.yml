@@ -1,0 +1,93 @@
+name: "🐞 Сообщение об ошибке"
+description: "Опишите воспроизводимую проблему в приложении"
+title: "[Ошибка]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что помогаете улучшать «Точку опоры».
+
+        Вопросы по установке и использованию лучше задать в [Discussions](https://github.com/gankata/tochka-opory/discussions/categories/помощь-и-вопросы). Об уязвимости сообщите приватно по [инструкции безопасности](https://github.com/gankata/tochka-opory/blob/main/SECURITY.md), не создавая публичный Issue.
+
+        Не прикладывайте личную базу, архивы, реальные финансовые записи, заметки, пароли и токены. Для примеров используйте только вымышленные данные.
+  - type: input
+    id: version
+    attributes:
+      label: "Версия приложения"
+      description: "Укажите номер версии, в которой возникает проблема."
+      placeholder: "Например, номер из package.json или раздела «Данные»"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: "Операционная система"
+      options:
+        - "macOS"
+        - "Windows"
+        - "Другая"
+    validations:
+      required: true
+  - type: input
+    id: osVersion
+    attributes:
+      label: "Версия операционной системы"
+      description: "Если известна, укажите версию или номер сборки ОС."
+      placeholder: "Например, версия из системных настроек"
+    validations:
+      required: false
+  - type: dropdown
+    id: browser
+    attributes:
+      label: "Браузер"
+      options:
+        - "Safari"
+        - "Chrome"
+        - "Edge"
+        - "Firefox"
+        - "Другой"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Шаги воспроизведения"
+      description: "Опишите действия по порядку, начиная с открытия приложения."
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Ожидаемый результат"
+      description: "Что должно было произойти?"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Фактический результат"
+      description: "Что произошло на самом деле? Можно приложить снимок без личных данных."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Текст ошибки или логи"
+      description: "Если есть, добавьте только относящийся к проблеме фрагмент. Перед отправкой удалите личные данные, пути, пароли и токены."
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: "Перед отправкой"
+      options:
+        - label: "В сообщении и вложениях нет базы, архивов, реальных записей, паролей, токенов и других личных данных."
+          required: true
+        - label: "Я проверил(а) существующие Issues и не нашёл(ла) такой же ошибки."
+          required: false

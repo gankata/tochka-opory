@@ -147,7 +147,7 @@ npm run test:browser
 - [Опыт и настройки](https://github.com/gankata/tochka-opory/discussions/categories/опыт-и-настройки) — сценарии использования и собственные доработки.
 - [Новости и релизы](https://github.com/gankata/tochka-opory/discussions/categories/новости-и-релизы) — объявления и обратная связь по версиям.
 
-Для воспроизводимых ошибок используйте [Issues](https://github.com/gankata/tochka-opory/issues), для уязвимостей — приватный канал из [SECURITY.md](SECURITY.md). Не публикуйте базу, архивы, реальные финансовые записи, заметки, пароли и токены.
+Для воспроизводимых ошибок используйте [форму сообщения об ошибке](https://github.com/gankata/tochka-opory/issues/new?template=bug_report.yml), для уязвимостей — приватный канал из [SECURITY.md](SECURITY.md). Не публикуйте базу, архивы, реальные финансовые записи, заметки, пароли и токены.
 
 ## Документация и участие
 
