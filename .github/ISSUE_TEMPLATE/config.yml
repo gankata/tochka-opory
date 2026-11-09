@@ -1,0 +1,14 @@
+blank_issues_enabled: true
+contact_links:
+  - name: "💬 Помощь и вопросы"
+    url: "https://github.com/gankata/tochka-opory/discussions/categories/помощь-и-вопросы"
+    about: "Установка, обновление и использование приложения. Не публикуйте личные данные."
+  - name: "💡 Идеи и улучшения"
+    url: "https://github.com/gankata/tochka-opory/discussions/categories/идеи-и-улучшения"
+    about: "Обсудить новую возможность и сценарий её использования."
+  - name: "👋 Приветствие и правила сообщества"
+    url: "https://github.com/gankata/tochka-opory/discussions/1"
+    about: "Как выбрать раздел и подготовить безопасное описание без личных данных."
+  - name: "🔒 Сообщение об уязвимости"
+    url: "https://github.com/gankata/tochka-opory/blob/main/SECURITY.md"
+    about: "Не создавайте публичный Issue: сначала прочитайте инструкцию приватного сообщения."

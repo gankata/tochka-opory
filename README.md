@@ -138,6 +138,17 @@ npm run test:browser
 
 </details>
 
+## Общение и поддержка
+
+Основное место для разговора с пользователями и разработчиками — [GitHub Discussions](https://github.com/gankata/tochka-opory/discussions). Начните с [приветствия и правил сообщества](https://github.com/gankata/tochka-opory/discussions/1).
+
+- [Помощь и вопросы](https://github.com/gankata/tochka-opory/discussions/categories/помощь-и-вопросы) — установка, обновление и использование.
+- [Идеи и улучшения](https://github.com/gankata/tochka-opory/discussions/categories/идеи-и-улучшения) — предложения новых возможностей.
+- [Опыт и настройки](https://github.com/gankata/tochka-opory/discussions/categories/опыт-и-настройки) — сценарии использования и собственные доработки.
+- [Новости и релизы](https://github.com/gankata/tochka-opory/discussions/categories/новости-и-релизы) — объявления и обратная связь по версиям.
+
+Для воспроизводимых ошибок используйте [Issues](https://github.com/gankata/tochka-opory/issues), для уязвимостей — приватный канал из [SECURITY.md](SECURITY.md). Не публикуйте базу, архивы, реальные финансовые записи, заметки, пароли и токены.
+
 ## Документация и участие
 
 - [Руководство по функциям](docs/GUIDE.md)
