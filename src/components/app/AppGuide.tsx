@@ -217,14 +217,13 @@ export default function AppGuide({ open, onOpenChange }: AppGuideProps) {
       <DialogHeader>
         <div className="mb-2 text-xs font-semibold uppercase tracking-[.16em] text-primary">Версия {__APP_VERSION__}</div>
         <DialogTitle className="editorial text-3xl">Что нового</DialogTitle>
-        <DialogDescription className="pt-2 text-base leading-relaxed text-foreground/80">Ваши записи остались на месте. В этой версии появились знакомство с приложением, более удобное обновление и гибкий график дохода.</DialogDescription>
+        <DialogDescription className="pt-2 text-base leading-relaxed text-foreground/80">Ваши записи остались на месте. В этой версии контекстные подсказки стали практическими инструкциями вместо повторения текста на экране.</DialogDescription>
       </DialogHeader>
       <ul className="space-y-3 text-sm leading-relaxed">
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Знакомство с иллюстрациями, переходами к функциям и кнопка «Руководство».</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Однозначное обновление рядом со старой папкой переносит локальную базу.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Гибкий график дохода поддерживает одну или две выплаты, а также поступления по факту.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Подробное руководство объясняет разделы и их связи простым языком.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Контекстные подсказки рядом с функциями можно отключить в настройках.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Практические подсказки объясняют порядок действий, доступные возможности и следующий шаг.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Инструкции обновлены во всех разделах, вкладках и изменяющихся заголовках.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Календарь настроения подсказывает, как выбрать дату, снять фильтр и переключить месяц.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Наведение, нажатие, касание и клавиатура сохранены; подсказки можно отключить в настройках.</li>
       </ul>
       <DialogFooter className="mt-2 sm:justify-between">
         <Button type="button" variant="outline" className="min-h-11" onClick={() => { closeUpdate(); onOpenChange(true); }}><BookOpen className="h-4 w-4" />Открыть руководство</Button>

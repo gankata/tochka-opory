@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { FeatureHint } from "@/components/app/FeatureHint";
+import { getFeatureHintText } from "@/lib/feature-hint-content";
 
 export function PageHeader({ eyebrow, title, description, action, hint }: { eyebrow?: string; title: string; description: string; action?: ReactNode; hint?: string }) {
   return <header className="mb-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
     <div className="max-w-3xl">
       {eyebrow && <p className="mb-1 text-sm font-semibold text-primary">{eyebrow}</p>}
-      <div className="flex items-start gap-1"><h1 className="editorial text-balance text-3xl font-semibold leading-tight sm:text-4xl">{title}</h1><FeatureHint title={title} text={hint ?? description} /></div>
+      <div className="flex items-start gap-1"><h1 className="editorial text-balance text-3xl font-semibold leading-tight sm:text-4xl">{title}</h1><FeatureHint title={title} text={hint ?? getFeatureHintText(title)} /></div>
       <p className="mt-2 max-w-[70ch] text-base leading-relaxed text-muted-foreground">{description}</p>
     </div>
     {action && <div className="shrink-0">{action}</div>}
@@ -31,7 +32,7 @@ export function Metric({ label, value, note, tone = "default" }: { label: string
 export function Section({ title, description, action, children, className = "", style, hint }: { title: string; description?: string; action?: ReactNode; children: ReactNode; className?: string; style?: CSSProperties; hint?: string }) {
   return <section className={`surface p-5 sm:p-6 ${className}`} style={style}>
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div><div className="flex items-start gap-1"><h2 className="text-lg font-semibold">{title}</h2><FeatureHint title={title} text={hint ?? description} /></div>{description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}</div>
+      <div><div className="flex items-start gap-1"><h2 className="text-lg font-semibold">{title}</h2><FeatureHint title={title} text={hint ?? getFeatureHintText(title)} /></div>{description && <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p>}</div>
       {action}
     </div>
     {children}

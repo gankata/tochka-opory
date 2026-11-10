@@ -31,6 +31,41 @@ function rectanglesOverlap(first, second) {
     && first.y + first.height > second.y;
 }
 
+function normalizedText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+async function assertPracticalFeatureHints(page, name) {
+  const count = await page.locator("[data-feature-hint]").count();
+  if (!count) throw new Error(`No feature hints found: ${name}`);
+  const reviewed = [];
+
+  for (let index = 0; index < count; index++) {
+    const trigger = page.locator("[data-feature-hint]").nth(index);
+    const label = await trigger.getAttribute("aria-label");
+    await trigger.scrollIntoViewIfNeeded();
+    await trigger.click();
+    const content = page.locator("[data-feature-hint-content]");
+    await content.waitFor();
+    const text = normalizedText(await content.locator("p").innerText());
+    if (text.length < 100) throw new Error(`Hint is not sufficiently practical: ${name} / ${label}`);
+    const duplicate = await trigger.evaluate((element, hintText) => {
+      const normalize = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+      const container = element.closest("header, section");
+      if (!container) return false;
+      return [...container.querySelectorAll("p")].some((paragraph) => normalize(paragraph.textContent) === hintText);
+    }, text);
+    if (duplicate) throw new Error(`Hint duplicates the visible description: ${name} / ${label}`);
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error(`Hint causes horizontal overflow: ${name} / ${label}`);
+    reviewed.push(label);
+    await page.keyboard.press("Escape");
+    await content.waitFor({ state: "hidden" });
+  }
+
+  console.log(`Practical hints ${name}: ${reviewed.length}`);
+  return reviewed;
+}
+
 async function assertToastLayout(page, output, name) {
   const toast = page.locator("[data-sonner-toast]").filter({ hasText: "Настройки и валютные курсы сохранены" }).last();
   const icon = toast.locator("[data-icon]");
@@ -168,7 +203,7 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   const updateDialog = page.getByRole("dialog", { name: "Что нового", exact: true });
   await updateDialog.waitFor();
-  await updateDialog.locator("li").filter({ hasText: "Гибкий график дохода" }).waitFor();
+  await updateDialog.locator("li").filter({ hasText: "Практические подсказки" }).waitFor();
   await page.screenshot({ path: path.join(output, "guide-update-desktop.jpg"), type: "jpeg", quality: 90 });
   await updateDialog.getByRole("button", { name: "Открыть руководство", exact: true }).click();
   await guideDialog.waitFor();
@@ -192,7 +227,7 @@ try {
   const dataHint = page.getByRole("button", { name: "Подсказка: Ваши данные остаются вашими", exact: true });
   const hintContent = page.locator("[data-feature-hint-content]");
   await dataHint.click();
-  await hintContent.getByText("Локальная база работает без облака.", { exact: false }).waitFor();
+  await hintContent.getByText("Перед крупными изменениями создайте копию.", { exact: false }).waitFor();
   await page.keyboard.press("Escape");
   await hintContent.waitFor({ state: "hidden" });
   await page.mouse.move(0, 0);
@@ -1051,10 +1086,63 @@ try {
   if (paletteSeconds > 0.00001) throw new Error(`Palette reduced motion was not respected: ${paletteDuration}`);
   await page.getByRole("button", { name: "Закрыть поиск", exact: true }).click();
 
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
+  const detailsButton = page.getByRole("button", { name: "Подробный обзор", exact: true });
+  if (await detailsButton.count()) await detailsButton.click();
+  await assertPracticalFeatureHints(page, "dashboard");
+  await page.getByRole("button", { name: "Настроить главную", exact: true }).click();
+  await assertPracticalFeatureHints(page, "dashboard-customizing");
+
+  for (const route of ["/operations", "/mood", "/notes", "/analytics", "/calendar", "/assets"]) {
+    await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
+    await assertPracticalFeatureHints(page, route);
+  }
+
+  await page.goto(`${origin}/notes`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Граф связей", exact: true }).click();
+  await assertPracticalFeatureHints(page, "notes-graph");
+
+  for (const tab of ["payments", "envelopes", "goals", "wallet"]) {
+    await page.goto(`${origin}/plan?tab=${tab}`, { waitUntil: "networkidle" });
+    await assertPracticalFeatureHints(page, `plan-${tab}`);
+  }
+  for (const tab of ["backups", "imports", "settings", "reminders", "options", "help"]) {
+    await page.goto(`${origin}/data?tab=${tab}`, { waitUntil: "networkidle" });
+    await assertPracticalFeatureHints(page, `data-${tab}`);
+  }
+
+  await page.goto(`${origin}/mood`, { waitUntil: "networkidle" });
+  const moodCalendarHint = page.getByRole("button", { name: "Подсказка: Календарь", exact: true });
+  await moodCalendarHint.scrollIntoViewIfNeeded();
+  await moodCalendarHint.focus();
+  const moodCalendarContent = page.locator("[data-feature-hint-content]");
+  await moodCalendarContent.getByText("Повторное нажатие на выбранный день или кнопка «Все дни» снимет фильтр.", { exact: false }).waitFor();
+  await moodCalendarContent.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  await assertAccessible(page, "mood-calendar-hint-desktop");
+  await page.screenshot({ path: path.join(output, "feature-hint-mood-calendar-desktop.jpg"), type: "jpeg", quality: 92, animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await moodCalendarContent.waitFor({ state: "hidden" });
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(`${origin}/mood`, { waitUntil: "networkidle" });
+  await assertPracticalFeatureHints(page, "mood-mobile");
+  await moodCalendarHint.scrollIntoViewIfNeeded();
+  await moodCalendarHint.focus();
+  await moodCalendarContent.waitFor();
+  await moodCalendarContent.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
+  const mobileHintBox = await moodCalendarContent.boundingBox();
+  if (!mobileHintBox || mobileHintBox.x < 0 || mobileHintBox.x + mobileHintBox.width > 375 || mobileHintBox.y < 0 || mobileHintBox.y + mobileHintBox.height > 812) throw new Error("Mobile mood hint is clipped");
+  await assertAccessible(page, "mood-calendar-hint-mobile");
+  await page.screenshot({ path: path.join(output, "feature-hint-mood-calendar-mobile.jpg"), type: "jpeg", quality: 92, animations: "disabled" });
+  await page.keyboard.press("Escape");
+  await moodCalendarContent.waitFor({ state: "hidden" });
+
   console.log("consoleErrors", JSON.stringify(errors));
   console.log("badResponses", JSON.stringify(badResponses));
   if (errors.length || badResponses.length) throw new Error("Browser release gate failed");
-  console.log("Auth, guide links, feature hints, rich notes, exports, global search, quick actions, deep links, backup and mobile layout: OK");
+  console.log("Auth, guide links, practical feature hints in every section, rich notes, exports, global search, quick actions, deep links, backup and mobile layout: OK");
 } finally {
   if (secondContext) await secondContext.close();
   if (browser) await browser.close();
