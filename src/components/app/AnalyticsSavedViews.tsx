@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Bookmark, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { AnalyticsGroup, AnalyticsKind, AnalyticsPeriod } from "@/lib/analytics";
+import { createUuid } from "@/lib/uuid";
 import { Button } from "@/components/ui/button";
 import { Field, FormDialog } from "@/components/app/Common";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -101,7 +102,7 @@ export default function AnalyticsSavedViews(props: AnalyticsSavedViewsProps) {
     event.preventDefault();
     const normalized = validateName();
     if (!normalized) return;
-    const view: SavedAnalyticsView = { id: crypto.randomUUID(), name: normalized, kind, period, group, customStart, customEnd };
+    const view: SavedAnalyticsView = { id: createUuid(), name: normalized, kind, period, group, customStart, customEnd };
     if (!commit([...savedViews, view])) return;
     setActiveViewId(view.id);
     setSaveOpen(false);

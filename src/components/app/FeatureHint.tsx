@@ -34,8 +34,15 @@ export function FeatureHint({ title, text }: { title: string; text?: string }) {
         aria-describedby={open ? id : undefined}
         onMouseEnter={() => { cancelClose(); setOpen(true); }}
         onMouseLeave={scheduleClose}
-        onFocus={() => { cancelClose(); setOpen(true); }}
         onBlur={scheduleClose}
+        onClick={(event) => {
+          // Hover may already have opened the hint. Do not let the trigger's
+          // default click handler immediately toggle it shut. Keyboard Enter
+          // and Space use this same predictable path.
+          event.preventDefault();
+          cancelClose();
+          setOpen(true);
+        }}
       >
         <CircleHelp className="h-[18px] w-[18px]" aria-hidden="true" />
       </button>

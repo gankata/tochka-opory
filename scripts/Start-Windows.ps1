@@ -37,24 +37,102 @@ try {
   }
   if ($Mode -notin @("1", "2")) { throw "Выберите режим 1 или 2." }
 
-  $node = Get-Command node.exe -ErrorAction SilentlyContinue
-  if (-not $node) { $node = Get-Command node -ErrorAction SilentlyContinue }
-  if (-not $node) {
-    Write-Host "`n  Node.js 22 или новее не найден." -ForegroundColor Yellow
-    Write-Host "  Пока есть интернет, установите LTS-версию с https://nodejs.org/"
-    Write-Host "  После установки закройте это окно и запустите файл снова.`n"
-    throw "Node.js не найден."
+  $NodeVersion = "22.23.4"
+
+  function Test-Node([string]$Path) {
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+      $version = (& $Path --version 2>$null | Select-Object -First 1)
+      if ($LASTEXITCODE -ne 0 -or -not $version) { return $false }
+      $major = $version.TrimStart("v").Split(".")[0]
+      return ([int]$major -ge 22)
+    } catch {
+      return $false
+    }
   }
 
-  $nodeVersion = (& $node.Source --version).TrimStart("v").Split(".")[0]
-  if ([int]$nodeVersion -lt 22) {
-    throw "Нужен Node.js 22 или новее. Сейчас установлен: $(& $node.Source --version)."
+  function Install-PortableNode {
+    $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    switch ($architecture) {
+      "X64" {
+        $nodePlatform = "win-x64"
+        $expectedHash = "cbc74b5e0982c9dbb41525fd8fb5dcd32fbee237863f7829072f4639a1ce5f20"
+      }
+      "Arm64" {
+        $nodePlatform = "win-arm64"
+        $expectedHash = "a8b8cd79cbbb3062435f449591d98dd63730bbbf30ce2d7cc3a6376c236cb111"
+      }
+      default { throw "Архитектура Windows $architecture не поддерживается автоматической загрузкой Node.js." }
+    }
+
+    $nodeDist = "node-v$NodeVersion-$nodePlatform"
+    $toolchain = Join-Path $ProjectRoot ".toolchain"
+    $runtimeDir = Join-Path $toolchain $nodeDist
+    $runtimeNode = Join-Path $runtimeDir "node.exe"
+    if (Test-Node $runtimeNode) { return $runtimeNode }
+
+    Write-Step "Совместимый Node.js не найден. Скачиваю официальный Node.js $NodeVersion…"
+    Write-Host "  Он будет сохранён в папке приложения, без установки в систему и прав администратора."
+    $tempDir = Join-Path $toolchain (".node-download-" + [guid]::NewGuid().ToString("N"))
+    $null = New-Item -ItemType Directory -Path $tempDir -Force
+    try {
+      $archive = Join-Path $tempDir "$nodeDist.zip"
+      $url = "https://nodejs.org/dist/v$NodeVersion/$nodeDist.zip"
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+      Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+      $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($actualHash -ne $expectedHash) {
+        throw "Контрольная сумма Node.js не совпала. Загрузка отклонена."
+      }
+
+      Expand-Archive -LiteralPath $archive -DestinationPath $tempDir
+      $extractedNode = Join-Path $tempDir "$nodeDist\node.exe"
+      if (-not (Test-Node $extractedNode)) { throw "Не удалось распаковать или проверить Node.js." }
+      if (Test-Path -LiteralPath $runtimeDir) { Remove-Item -LiteralPath $runtimeDir -Recurse -Force }
+      Move-Item -LiteralPath (Join-Path $tempDir $nodeDist) -Destination $runtimeDir
+      if (-not (Test-Node $runtimeNode)) { throw "Локальный Node.js не прошёл проверку после установки." }
+      Write-Host "  Node.js установлен локально и готов к автономным запускам." -ForegroundColor Green
+      return $runtimeNode
+    } catch {
+      if ($_.Exception.Message -notmatch "Контрольная сумма|распаковать|проверку") {
+        throw "Не удалось подготовить Node.js. Проверьте интернет и повторите запуск. $($_.Exception.Message)"
+      }
+      throw
+    } finally {
+      if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
   }
-  $npm = Get-Command npm.cmd -ErrorAction Stop
+
+  $nodePath = $null
+  if ($env:TOCHKA_FORCE_PORTABLE_NODE -ne "1") {
+    $candidates = @()
+    $nodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+    if ($nodeCommand) { $candidates += $nodeCommand.Source }
+    $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+    if ($nodeCommand) { $candidates += $nodeCommand.Source }
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+      if (Test-Node $candidate) { $nodePath = $candidate; break }
+    }
+  }
+  if (-not $nodePath) { $nodePath = Install-PortableNode }
+  $node = Get-Command -Name $nodePath -CommandType Application -ErrorAction Stop
+
+  $nodeDirectory = Split-Path -Parent $nodePath
+  $npmPath = Join-Path $nodeDirectory "npm.cmd"
+  if (-not (Test-Path -LiteralPath $npmPath -PathType Leaf)) {
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    if ($npmCommand) { $npmPath = $npmCommand.Source }
+  }
+  if (-not $npmPath -or -not (Test-Path -LiteralPath $npmPath -PathType Leaf)) {
+    throw "npm не найден рядом с Node.js. Повторите запуск или переустановите приложение."
+  }
+  $npm = Get-Command -Name $npmPath -CommandType Application -ErrorAction Stop
+  $env:PATH = "$nodeDirectory;$env:PATH"
 
   $modulesStamp = Join-Path $ProjectRoot "node_modules\.package-lock.json"
-  if (-not (Test-Path $modulesStamp)) {
-    Write-Step "Первый запуск: устанавливаю зависимости…"
+  $packageLock = Get-Item (Join-Path $ProjectRoot "package-lock.json")
+  if (-not (Test-Path $modulesStamp) -or ($packageLock.LastWriteTimeUtc -gt (Get-Item $modulesStamp).LastWriteTimeUtc)) {
+    Write-Step "Устанавливаю зависимости. Это нужно после установки или обновления…"
     Invoke-Native $npm.Source @("ci")
   }
 

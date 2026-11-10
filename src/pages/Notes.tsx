@@ -6,6 +6,7 @@ import type { NoteKind } from "@contracts/notes";
 import { trpc } from "@/providers/trpc";
 import { downloadBlob, todayISO } from "@/lib/utils-app";
 import { buildNoteTree, flattenNoteTree, noteFilename, notesToMarkdown, noteToMarkdown } from "@/lib/notes";
+import { createUuid } from "@/lib/uuid";
 import type { Note } from "@/types";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorPage, LoadingPage, PageHeader } from "@/components/app/Common";
@@ -89,7 +90,7 @@ export default function Notes() {
     const value = templates[template];
     const document = { type: "doc", content: value.content.split("\n\n").map((text) => ({ type: "paragraph", content: [{ type: "text", text }] })) };
     try {
-      const result = await create.mutateAsync({ parentId: null, kind: "note", title: value.title, content: value.content, document, items: [], tags: value.tags, relatedLinks: template === "trip" ? [{ id: crypto.randomUUID(), section: "plan", label: "Бюджет поездки", targetId: null }] : [], sortOrder: Math.max(0, ...data.notes.map((note) => note.sortOrder)) + 1 });
+      const result = await create.mutateAsync({ parentId: null, kind: "note", title: value.title, content: value.content, document, items: [], tags: value.tags, relatedLinks: template === "trip" ? [{ id: createUuid(), section: "plan", label: "Бюджет поездки", targetId: null }] : [], sortOrder: Math.max(0, ...data.notes.map((note) => note.sortOrder)) + 1 });
       await utils.workspace.get.invalidate(); setSelectedId(result.id); setShowGraph(false); toast.success("Заметка создана по шаблону");
     } catch { toast.error("Не удалось создать заметку"); }
   };

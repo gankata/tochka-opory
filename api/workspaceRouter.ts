@@ -448,6 +448,21 @@ function parseSnapshot(raw: string): SnapshotInput {
   }
 }
 
+export async function insertTransactionIdempotent(userId: number, values: ReturnType<typeof normalizeTransaction>) {
+  if (values.clientId) {
+    const [inserted] = await getDb().insert(transactions).values({ ...values, userId })
+      .onConflictDoNothing({ target: [transactions.userId, transactions.clientId] })
+      .returning({ id: transactions.id });
+    if (inserted) return { id: inserted.id, created: true };
+    const [existing] = await getDb().select({ id: transactions.id }).from(transactions)
+      .where(and(eq(transactions.userId, userId), eq(transactions.clientId, values.clientId))).limit(1);
+    if (existing) return { id: existing.id, created: false };
+    throw new Error("Операция с таким clientId не найдена после конфликта вставки");
+  }
+  const [inserted] = await getDb().insert(transactions).values({ ...values, userId }).returning({ id: transactions.id });
+  return { id: inserted.id, created: true };
+}
+
 export const workspaceRouter = createRouter({
   get: adminQuery.query(async ({ ctx }) => {
     await ensureWorkspace(ctx.user.id);
@@ -465,22 +480,19 @@ export const workspaceRouter = createRouter({
   }),
 
   transactionCreate: adminQuery.input(transactionInput).mutation(async ({ ctx, input }) => {
-    if (input.clientId) {
-      const [existing] = await getDb().select({ id: transactions.id }).from(transactions)
-        .where(and(eq(transactions.userId, ctx.user.id), eq(transactions.clientId, input.clientId))).limit(1);
-      if (existing) return existing;
-    }
     const values = normalizeTransaction(input);
     await assertExpenseCategory(ctx.user.id, values.type, values.category);
-    const [{ id }] = await getDb().insert(transactions).values({ ...values, userId: ctx.user.id }).returning();
-    await recordActivity(
-      ctx.user.id,
-      "create",
-      "transaction",
-      id,
-      `${values.type}: ${values.category}, ${values.originalAmount} ${values.currency} (≈ ${values.amountRub} ₽)`,
-    );
-    return { id };
+    const result = await insertTransactionIdempotent(ctx.user.id, values);
+    if (result.created) {
+      await recordActivity(
+        ctx.user.id,
+        "create",
+        "transaction",
+        result.id,
+        `${values.type}: ${values.category}, ${values.originalAmount} ${values.currency} (≈ ${values.amountRub} ₽)`,
+      );
+    }
+    return { id: result.id };
   }),
   transactionUpdate: adminQuery.input(transactionInput.partial().extend({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;

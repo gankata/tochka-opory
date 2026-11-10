@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 import { Download, FileUp, Pencil, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,6 +41,7 @@ import { CategoryBadge } from "@/components/app/CategoryBadge";
 import { CategoryCombobox } from "@/components/app/CategoryCombobox";
 import { DatePicker } from "@/components/app/DatePicker";
 import { queueOfflineOperation, readOfflineOperations, writeOfflineOperations, type OfflineOperation } from "@/lib/offline-operations";
+import { createUuid } from "@/lib/uuid";
 
 type OperationType = Transaction["type"];
 type ExchangeDirection = "buy" | "sell";
@@ -175,25 +176,35 @@ export default function Transactions() {
   const bulkCategorize = trpc.imports.bulkCategorize.useMutation();
   const bulkDelete = trpc.imports.bulkDelete.useMutation();
   const [offlineCount, setOfflineCount] = useState(() => readOfflineOperations().length);
+  const syncRef = useRef({ create, utils });
+  const flushingRef = useRef(false);
 
+  useEffect(() => { syncRef.current = { create, utils }; });
   useEffect(() => {
     const flush = async () => {
-      if (!navigator.onLine) return;
-      const queue = readOfflineOperations(); const remaining: OfflineOperation[] = [];
-      for (const operation of queue) {
-        try { await create.mutateAsync(operation); } catch { remaining.push(operation); }
+      if (!navigator.onLine || flushingRef.current) return;
+      flushingRef.current = true;
+      try {
+        const queue = readOfflineOperations(); const remaining: OfflineOperation[] = [];
+        for (const operation of queue) {
+          try { await syncRef.current.create.mutateAsync(operation); } catch { remaining.push(operation); }
+        }
+        writeOfflineOperations(remaining); setOfflineCount(remaining.length);
+        if (queue.length > remaining.length) {
+          await syncRef.current.utils.workspace.get.invalidate();
+          toast.success(`Отложенные операции синхронизированы: ${queue.length - remaining.length}`);
+        }
+      } finally {
+        flushingRef.current = false;
       }
-      writeOfflineOperations(remaining); setOfflineCount(remaining.length);
-      if (queue.length > remaining.length) { await utils.workspace.get.invalidate(); toast.success(`Отложенные операции синхронизированы: ${queue.length - remaining.length}`); }
     };
     const count = () => setOfflineCount(readOfflineOperations().length);
     window.addEventListener("online", flush); window.addEventListener("tochka-offline-queue", count);
     void flush();
     return () => { window.removeEventListener("online", flush); window.removeEventListener("tochka-offline-queue", count); };
-  }, [create, utils]);
+  }, []);
 
   /* URL search params are an external state source for this dialog. */
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (params.get("new") === "1") {
       const requestedType = params.get("type");
@@ -203,7 +214,6 @@ export default function Transactions() {
       setOpen(true);
     }
   }, [params]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const close = () => {
     setOpen(false);
@@ -270,7 +280,7 @@ export default function Transactions() {
           : null,
       note: form.note || null,
       source: editing?.source ?? "Веб-приложение",
-      clientId: editing?.clientId ?? crypto.randomUUID(),
+      clientId: editing?.clientId ?? createUuid(),
     };
     if (
       !payload.category ||

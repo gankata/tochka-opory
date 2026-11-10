@@ -128,6 +128,32 @@ test("импорт пропускает повторный файл и полн�
   expect((await caller.imports.batches()).find((item) => item.id === first.id)?.status).toBe("rolledBack");
 });
 
+test("импорт 5000 строк вставляется частями и полностью откатывается", async () => {
+  const user = await ensureLocalUser();
+  const { appRouter } = await import("./router");
+  const caller = appRouter.createCaller({ req: new Request("http://localhost"), resHeaders: new Headers(), user });
+  const rows = Array.from({ length: 5000 }, (_, index) => ({
+    operationDate: "2026-11-06", type: "Расход" as const, category: "Большой импорт", amountRub: 100 + index,
+    currency: "RUB" as const, originalAmount: 100 + index, exchangeRate: 1, note: `Строка ${index}`, source: "Тест", externalId: `bulk-5000-${index}`,
+  }));
+  const imported = await caller.imports.importTransactions({ name: "5000 строк", format: "csv", rows });
+  expect(imported).toMatchObject({ imported: 5000, duplicates: 0 });
+  expect((await caller.workspace.get()).transactions.filter((item) => item.source === "Тест" && item.externalId?.startsWith("bulk-5000-"))).toHaveLength(5000);
+  await caller.imports.rollback({ id: imported.id! });
+  expect((await caller.workspace.get()).transactions.filter((item) => item.externalId?.startsWith("bulk-5000-"))).toHaveLength(0);
+});
+
+test("параллельные повторы clientId возвращают одну операцию без ошибок", async () => {
+  const user = await ensureLocalUser();
+  const { appRouter } = await import("./router");
+  const caller = appRouter.createCaller({ req: new Request("http://localhost"), resHeaders: new Headers(), user });
+  const clientId = crypto.randomUUID();
+  const input = { operationDate: "2026-11-10", type: "Расход" as const, category: "Повтор", amountRub: 42, currency: "RUB" as const, originalAmount: 42, exchangeRate: 1, clientId };
+  const results = await Promise.all(Array.from({ length: 20 }, () => caller.workspace.transactionCreate(input)));
+  expect(new Set(results.map((result) => result.id)).size).toBe(1);
+  expect((await caller.workspace.get()).transactions.filter((item) => item.clientId === clientId)).toHaveLength(1);
+});
+
 test("полный JSON-архив возвращает активы, правила, пакеты и свойства заметок", async () => {
   const user = await ensureLocalUser();
   const { appRouter } = await import("./router");

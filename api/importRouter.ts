@@ -118,7 +118,12 @@ export const importRouter = createRouter({
       const [{ id }] = await tx.insert(importBatches).values({
         userId, name: input.name, format: input.format, rowCount: accepted.length, duplicateCount,
       }).returning({ id: importBatches.id });
-      await tx.insert(transactions).values(accepted.map((row) => ({ ...row, userId, importBatchId: id })));
+      // Keep each statement below SQLite bind-parameter limits while the outer
+      // transaction preserves all-or-nothing imports, including 5000-row files.
+      for (let offset = 0; offset < accepted.length; offset += 50) {
+        const chunk = accepted.slice(offset, offset + 50);
+        await tx.insert(transactions).values(chunk.map((row) => ({ ...row, userId, importBatchId: id })));
+      }
       return id;
     });
     await recordActivity(userId, "import", "transactions", batchId, `Импортировано ${accepted.length} операций; пропущено дублей: ${duplicateCount}`);

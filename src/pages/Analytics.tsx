@@ -236,7 +236,12 @@ function CategoryComposition({ model, kind }: { model: AnalyticsModel; kind: Ana
   ];
   const activeCategory = hoveredIndex == null ? null : chartCategories[hoveredIndex] ?? null;
   return <Section title={kind === "expense" ? "Куда уходят деньги" : "Откуда приходят деньги"} description={model.categories[0] ? `Лидер периода: ${model.categories[0].name} — ${percent.format(model.categories[0].share)}% всех сумм. Наведите на сектор или строку для деталей.` : "Категории появятся после первой операции."}>
-    <div className="category-composition-chart relative mx-auto h-56 max-w-80" role="img" aria-label={`Кольцевая диаграмма категорий. ${chartCategories.map((category) => `${category.name}: ${money(category.total)}, ${percent.format(category.share)} процентов`).join(". ")}`}>
+    <div
+      className="category-composition-chart relative mx-auto h-56 max-w-80"
+      role="img"
+      aria-label={`Кольцевая диаграмма категорий. ${chartCategories.map((category) => `${category.name}: ${money(category.total)}, ${percent.format(category.share)} процентов`).join(". ")}`}
+      onMouseLeave={() => setHoveredIndex(null)}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <PieChart tabIndex={-1}>
           <Pie data={chartCategories} dataKey="total" nameKey="name" rootTabIndex={-1} innerRadius="62%" outerRadius="88%" paddingAngle={2} stroke="oklch(var(--card))" strokeWidth={2} isAnimationActive={!reducedMotion} animationDuration={500} onMouseEnter={(_, index) => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}>

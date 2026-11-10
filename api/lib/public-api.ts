@@ -5,7 +5,7 @@ import { z } from "zod";
 import { apiTokens, assetEntries, notes, transactions } from "@db/schema";
 import { getDb } from "../queries/connection";
 import { hashApiToken } from "../accessRouter";
-import { normalizeTransaction, transactionInput } from "../workspaceRouter";
+import { insertTransactionIdempotent, normalizeTransaction, transactionInput } from "../workspaceRouter";
 import { isIncomeOnlyCategory } from "@contracts/operationCategories";
 import { recordActivity } from "../queries/workspace";
 
@@ -72,16 +72,12 @@ export function registerPublicApi(app: Hono<{ Bindings: HttpBindings; Variables:
     try { body = await c.req.json(); } catch { return c.json({ error: "Ожидался JSON" }, 400); }
     const parsed = transactionInput.safeParse(body);
     if (!parsed.success) return c.json({ error: "Проверьте поля операции", details: parsed.error.flatten().fieldErrors }, 400);
-    if (parsed.data.clientId) {
-      const [existing] = await getDb().select({ id: transactions.id }).from(transactions)
-        .where(and(eq(transactions.userId, token.userId), eq(transactions.clientId, parsed.data.clientId))).limit(1);
-      if (existing) return c.json({ item: existing, idempotent: true });
-    }
     const values = normalizeTransaction(parsed.data);
     if (values.type === "Расход" && isIncomeOnlyCategory(values.category)) return c.json({ error: "Категория предназначена только для дохода" }, 400);
-    const [item] = await getDb().insert(transactions).values({ ...values, userId: token.userId }).returning();
-    await recordActivity(token.userId, "create", "transaction", item.id, "Операция добавлена через локальный API");
-    return c.json({ item }, 201);
+    const result = await insertTransactionIdempotent(token.userId, values);
+    if (!result.created) return c.json({ item: { id: result.id }, idempotent: true });
+    await recordActivity(token.userId, "create", "transaction", result.id, "Операция добавлена через локальный API");
+    return c.json({ item: { id: result.id } }, 201);
   });
 
   app.get("/api/v1/assets", async (c) => {

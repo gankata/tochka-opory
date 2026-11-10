@@ -110,7 +110,7 @@ export default function Dashboard() {
       </Section>}
 
       <div style={{ order: 2 }} className="mb-5 grid gap-5 xl:grid-cols-[1.3fr_1fr]" data-dashboard-recent>
-        <Section title="Последние операции" description="Недавние записи без дополнительных фильтров и расчётов." action={<button onClick={() => navigate("/operations")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Все операции<ArrowRight className="h-4 w-4" /></button>}>
+        <Section title="Последние операции" description="Недавние записи без дополнительных фильтров и расчётов." className="min-w-0" action={<button onClick={() => navigate("/operations")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Все операции<ArrowRight className="h-4 w-4" /></button>}>
           {recentTransactions.length ? <div className="divide-y">{recentTransactions.map((transaction) => {
             const code = operationCurrency(transaction);
             const amount = operationAmount(transaction);
@@ -122,7 +122,7 @@ export default function Dashboard() {
           })}</div> : <EmptyState title="Пока нет операций" text="Добавьте первый доход, расход или обмен — здесь появятся последние записи." action={<Button variant="outline" onClick={() => navigate("/operations?new=1")} className="min-h-11">Добавить операцию</Button>} />}
         </Section>
 
-        <Section title="Последнее состояние" description="Короткие записи помогают вернуться к событиям дня." action={<button onClick={() => navigate("/mood")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Дневник<ArrowRight className="h-4 w-4" /></button>}>
+        <Section title="Последнее состояние" description="Короткие записи помогают вернуться к событиям дня." className="min-w-0" action={<button onClick={() => navigate("/mood")} className="flex min-h-11 items-center gap-1 text-sm font-medium text-primary">Дневник<ArrowRight className="h-4 w-4" /></button>}>
           {data.moods.length ? <div className="divide-y">{data.moods.slice(0, 3).map((mood) => <button key={mood.id} onClick={() => navigate("/mood")} className="flex min-h-16 w-full items-center justify-between gap-4 py-3 text-left first:pt-0 last:pb-0"><span className="min-w-0"><span className="block truncate text-sm font-medium">{mood.emotion}</span><span className="mt-1 block truncate text-xs text-muted-foreground">{formatDate(mood.entryDate)} · {mood.topic}</span></span><span className="number shrink-0 text-lg font-semibold">{mood.mood}</span></button>)}</div> : <EmptyState title="Дневник готов к первой записи" text="Достаточно даты, настроения, эмоции и темы — детали можно добавить позже." action={<Button variant="outline" onClick={() => navigate("/mood?new=1")} className="min-h-11">Сделать запись</Button>} />}
         </Section>
       </div>

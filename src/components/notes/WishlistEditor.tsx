@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { WishlistItem, WishlistPriority } from "@contracts/notes";
 import { wishlistStats } from "@/lib/notes";
 import { money } from "@/lib/utils-app";
+import { createUuid } from "@/lib/uuid";
 import { Button } from "@/components/ui/button";
 
 const priorityLabels: Record<WishlistPriority, string> = { low: "Не срочно", normal: "Обычный", high: "Очень хочу" };
@@ -31,7 +32,7 @@ export default function WishlistEditor({ items, onChange }: { items: WishlistIte
       toast.error("Проверьте стоимость");
       return;
     }
-    onChange([...items, { id: crypto.randomUUID(), title: title.trim(), price: parsedPrice, url: url.trim() || null, priority: "normal", done: false, note: null }]);
+    onChange([...items, { id: createUuid(), title: title.trim(), price: parsedPrice, url: url.trim() || null, priority: "normal", done: false, note: null }]);
     setTitle(""); setPrice(""); setUrl("");
   };
 

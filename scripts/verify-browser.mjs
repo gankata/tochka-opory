@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "playwright";
+import { chromium, firefox, webkit } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 
 async function assertAccessible(page, name) {
@@ -45,7 +45,7 @@ async function assertPracticalFeatureHints(page, name) {
     const label = await trigger.getAttribute("aria-label");
     await trigger.scrollIntoViewIfNeeded();
     await trigger.click();
-    const content = page.locator("[data-feature-hint-content]");
+    const content = page.locator('[data-feature-hint-content][data-state="open"]');
     await content.waitFor();
     const text = normalizedText(await content.locator("p").innerText());
     if (text.length < 100) throw new Error(`Hint is not sufficiently practical: ${name} / ${label}`);
@@ -85,12 +85,16 @@ async function assertToastLayout(page, output, name) {
   await toast.waitFor({ state: "hidden" });
 }
 
-const port = 3100;
+const browserName = process.env.BROWSER ?? "chromium";
+const browserType = { chromium, firefox, webkit }[browserName];
+if (!browserType) throw new Error(`Unsupported BROWSER: ${browserName}`);
+const port = Number(process.env.VERIFY_PORT ?? 3100);
 const origin = `http://127.0.0.1:${port}`;
-const output = path.resolve(".verification");
+const output = path.resolve(process.env.VERIFY_OUTPUT ?? `.verification/${browserName}`);
 const dataDir = path.join(output, "data");
 await fs.rm(output, { recursive: true, force: true });
 await fs.mkdir(output, { recursive: true });
+console.log(`Browser engine: ${browserName}`);
 
 const server = spawn(process.execPath, ["dist/boot.js"], {
   env: { ...process.env, NODE_ENV: "production", PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir },
@@ -150,8 +154,27 @@ try {
   });
   if (sameOriginLog.status !== 204) throw new Error("Same-origin API mutation was rejected");
 
-  browser = await chromium.launch({ headless: true });
+  browser = await browserType.launch({
+    headless: true,
+    executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined,
+    env: browserName === "firefox" && process.env.FIREFOX_DISABLE_SANDBOX === "1"
+      ? { ...process.env, MOZ_DISABLE_CONTENT_SANDBOX: "1", MOZ_DISABLE_GMP_SANDBOX: "1" }
+      : process.env,
+  });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 1, acceptDownloads: true });
+  await context.addInitScript(() => {
+    const originalConsoleError = console.error.bind(console);
+    console.error = (...values) => {
+      const readable = values.map((value) => {
+        if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ""}`;
+        if (typeof value === "object") {
+          try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+      });
+      originalConsoleError(...readable);
+    };
+  });
   const page = await context.newPage();
   const errors = [];
   const badResponses = [];
@@ -225,7 +248,7 @@ try {
   await guideDialog.waitFor({ state: "hidden" });
 
   const dataHint = page.getByRole("button", { name: "Подсказка: Ваши данные остаются вашими", exact: true });
-  const hintContent = page.locator("[data-feature-hint-content]");
+  const hintContent = page.locator('[data-feature-hint-content][data-state="open"]');
   await dataHint.click();
   await hintContent.getByText("Перед крупными изменениями создайте копию.", { exact: false }).waitFor();
   await page.keyboard.press("Escape");
@@ -717,6 +740,7 @@ try {
   await searchDialog.waitFor();
   if (await searchDialog.locator("[data-search-action]").count() !== 6) throw new Error("Not all quick actions are visible");
   await page.getByText("Недавние записи", { exact: true }).waitFor();
+  await page.waitForTimeout(350);
   const searchInput = page.locator('[data-slot="command-input"]');
   const searchInputWrapper = page.locator('[data-slot="command-input-wrapper"]');
   const inputOutline = await searchInput.evaluate((element) => getComputedStyle(element).outlineStyle);
@@ -886,6 +910,7 @@ try {
   await page.waitForFunction(() => document.querySelector('section[aria-label="Итоги капитала"]')?.textContent?.replace(/\s/g, "").includes("10000₽"));
   const capital = await page.locator('section[aria-label="Итоги капитала"]').innerText();
   if (!capital.replace(/\s/g, "").includes("10000₽")) throw new Error(`Net capital calculation is wrong: ${capital}`);
+  await page.waitForFunction(() => Array.from(document.querySelectorAll("[data-sonner-toast]")).every((toast) => Number(getComputedStyle(toast).opacity) === 1));
   await assertAccessible(page, "assets-filled-desktop");
   await page.screenshot({ path: path.join(output, "assets-filled-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
 
@@ -909,13 +934,57 @@ try {
   const revoked = await page.request.get(`${origin}/api/v1/transactions`, { headers: { Authorization: `Bearer ${tokenValue}` } });
   if (revoked.status() !== 401) throw new Error("Revoked token still works");
 
-  secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  secondContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    isMobile: browserName !== "firefox",
+  });
+  await secondContext.addInitScript(() => {
+    Object.defineProperty(Crypto.prototype, "randomUUID", { configurable: true, value: undefined });
+    const originalConsoleError = console.error.bind(console);
+    console.error = (...values) => {
+      const readable = values.map((value) => {
+        if (value instanceof Error) return `${value.name}: ${value.message}\n${value.stack ?? ""}`;
+        if (typeof value === "object") {
+          try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+      });
+      originalConsoleError(...readable);
+    };
+  });
   const phone = await secondContext.newPage();
+  const lanErrors = [];
+  const lanBadResponses = [];
+  phone.on("console", (message) => { if (message.type() === "error") lanErrors.push(message.text()); });
+  phone.on("pageerror", (error) => lanErrors.push(error.stack ?? error.message));
+  phone.on("response", (response) => { if (response.status() >= 400) lanBadResponses.push(`${response.status()} ${response.url()}`); });
   await phone.goto(`${origin}/login`, { waitUntil: "networkidle" });
   await phone.getByLabel("Логин", { exact: true }).fill("tester");
   await phone.locator('input[autocomplete="current-password"]').fill("first-local-password");
   await phone.getByRole("button", { name: "Войти", exact: true }).click();
   await phone.waitForURL(`${origin}/`);
+  await phone.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
+
+  if (await phone.evaluate(() => typeof crypto.randomUUID !== "undefined")) throw new Error("The LAN compatibility scenario must disable randomUUID");
+  await phone.goto(`${origin}/operations?new=1&date=2026-11-10`, { waitUntil: "networkidle" });
+  const lanOperationDialog = phone.getByRole("dialog", { name: "Новая операция", exact: true });
+  await lanOperationDialog.getByRole("combobox", { name: "Категория", exact: true }).click();
+  await phone.getByRole("option", { name: "Еда", exact: true }).click();
+  await lanOperationDialog.getByLabel("Сумма, ₽", { exact: true }).fill("1.25");
+  await lanOperationDialog.getByLabel("Комментарий", { exact: true }).fill("Проверка HTTP без randomUUID");
+  await lanOperationDialog.getByRole("button", { name: "Сохранить", exact: true }).click();
+  await lanOperationDialog.waitFor({ state: "hidden" });
+  await phone.getByText("Операция сохранена", { exact: true }).waitFor();
+  await phone.locator("article").filter({ hasText: "Проверка HTTP без randomUUID" }).waitFor();
+  if (await phone.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("LAN transaction causes horizontal overflow");
+  await phone.screenshot({ path: path.join(output, "phone-transaction-without-random-uuid.jpg"), type: "jpeg", quality: 90 });
+  await phone.waitForTimeout(100);
+  if (lanErrors.length || lanBadResponses.length) {
+    throw new Error(`LAN transaction browser gate failed: ${JSON.stringify({ lanErrors, lanBadResponses })}`);
+  }
+  console.log("LAN HTTP transaction without randomUUID: OK");
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
   await page.getByLabel("Текущий пароль", { exact: true }).fill("first-local-password");
@@ -940,6 +1009,7 @@ try {
   await page.locator('input[autocomplete="current-password"]').fill("second-local-password");
   await page.getByRole("button", { name: "Войти", exact: true }).click();
   await page.waitForURL(`${origin}/`);
+  await page.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
 
   await resetPassword("reset-local-password");
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
@@ -948,6 +1018,7 @@ try {
   await page.locator('input[autocomplete="current-password"]').fill("reset-local-password");
   await page.getByRole("button", { name: "Войти", exact: true }).click();
   await page.waitForURL(`${origin}/`);
+  await page.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
   errors.length = 0;
   badResponses.length = 0;
 
@@ -985,7 +1056,19 @@ try {
       await page.waitForTimeout(550);
     }
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
-    if (overflow) throw new Error(`Mobile horizontal overflow: ${route}`);
+    if (overflow) {
+      const details = await page.evaluate(() => ({
+        viewport: innerWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        offenders: Array.from(document.querySelectorAll("body *")).filter((element) => {
+          const style = getComputedStyle(element);
+          const box = element.getBoundingClientRect();
+          return style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && (box.right > innerWidth + 1 || box.left < -1);
+        }).slice(0, 20).map((element) => ({ tag: element.tagName, className: element.className, text: element.textContent?.slice(0, 120), rect: element.getBoundingClientRect().toJSON() })),
+      }));
+      await page.screenshot({ path: path.join(output, "mobile-overflow-failure.jpg"), type: "jpeg", quality: 90, fullPage: true });
+      throw new Error(`Mobile horizontal overflow: ${route}: ${JSON.stringify(details)}`);
+    }
     await page.screenshot({ path: path.join(output, `${route === "/" ? "dashboard" : route.slice(1)}-mobile.jpg`), type: "jpeg", quality: 85, fullPage: true });
   }
 
@@ -1023,9 +1106,16 @@ try {
   await guideDialog.getByRole("button", { name: "Открыть операции", exact: true }).click();
   await page.waitForURL(`${origin}/operations`);
   await guideDialog.waitFor({ state: "hidden" });
+  await page.getByRole("heading", { name: "Журнал операций", exact: true }).waitFor();
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mobile guide link destination horizontal overflow");
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
-  for (const [route, label] of [["/analytics", "Аналитика"], ["/calendar", "Календарь"], ["/plan", "План"], ["/assets", "Капитал"], ["/data", "Данные"]]) {
+  for (const [route, label, heading] of [
+    ["/analytics", "Аналитика", "Закономерности в ваших деньгах"],
+    ["/calendar", "Календарь", "Финансовый календарь"],
+    ["/plan", "План", "План, который можно уточнять"],
+    ["/assets", "Капитал", "Активы и обязательства"],
+    ["/data", "Данные", "Ваши данные остаются вашими"],
+  ]) {
     await page.getByRole("button", { name: "Ещё", exact: true }).click();
     const morePanel = page.getByRole("dialog", { name: "Другие разделы", exact: true });
     await morePanel.waitFor();
@@ -1036,9 +1126,11 @@ try {
     await morePanel.getByRole("link", { name: label, exact: true }).click();
     await page.waitForURL(`${origin}${route}`);
     await morePanel.waitFor({ state: "hidden" });
+    await page.getByRole("heading", { name: heading, exact: true }).waitFor();
   }
   await mobileNav.getByRole("link", { name: "Заметки", exact: true }).click();
   await page.waitForURL(`${origin}/notes`);
+  await page.getByRole("heading", { name: "Заметки и желания", exact: true }).waitFor();
 
   for (const width of [768, 1024]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1117,7 +1209,8 @@ try {
   const moodCalendarHint = page.getByRole("button", { name: "Подсказка: Календарь", exact: true });
   await moodCalendarHint.scrollIntoViewIfNeeded();
   await moodCalendarHint.focus();
-  const moodCalendarContent = page.locator("[data-feature-hint-content]");
+  await page.keyboard.press("Enter");
+  const moodCalendarContent = page.locator('[data-feature-hint-content][data-state="open"]');
   await moodCalendarContent.getByText("Повторное нажатие на выбранный день или кнопка «Все дни» снимет фильтр.", { exact: false }).waitFor();
   await moodCalendarContent.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   await assertAccessible(page, "mood-calendar-hint-desktop");
@@ -1129,7 +1222,9 @@ try {
   await page.goto(`${origin}/mood`, { waitUntil: "networkidle" });
   await assertPracticalFeatureHints(page, "mood-mobile");
   await moodCalendarHint.scrollIntoViewIfNeeded();
+  await page.evaluate(() => { if (document.activeElement instanceof HTMLElement) document.activeElement.blur(); });
   await moodCalendarHint.focus();
+  await page.keyboard.press("Enter");
   await moodCalendarContent.waitFor();
   await moodCalendarContent.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   const mobileHintBox = await moodCalendarContent.boundingBox();
