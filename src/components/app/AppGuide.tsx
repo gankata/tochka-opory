@@ -218,13 +218,13 @@ export default function AppGuide({ open, onOpenChange }: AppGuideProps) {
       <DialogHeader>
         <div className="mb-2 text-xs font-semibold uppercase tracking-[.16em] text-primary">Версия {__APP_VERSION__}</div>
         <DialogTitle className="editorial text-3xl">Что нового</DialogTitle>
-        <DialogDescription className="pt-2 text-base leading-relaxed text-foreground/80">Ваши записи остались на месте. Теперь первый запуск и обновление требуют меньше ручной подготовки, а работа с телефона стала надёжнее.</DialogDescription>
+        <DialogDescription className="pt-2 text-base leading-relaxed text-foreground/80">Ваши записи остались на месте. Иллюстрации руководства стали чётче, а рассматривать детали теперь удобнее на любом экране.</DialogDescription>
       </DialogHeader>
       <ul className="space-y-3 text-sm leading-relaxed">
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Если подходящего Node.js нет, launcher скачает официальную переносимую версию и проверит её контрольную сумму.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />macOS и Windows сами устанавливают зависимости и пересобирают приложение после обновления.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Добавление операций с телефона работает по локальному HTTP даже без браузерного crypto.randomUUID.</li>
-        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Подсказки корректно закрываются в WebKit, а диаграмма расходов сбрасывает выделение после ухода указателя.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />При масштабе 100 % весь снимок помещается на экране без прокрутки.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Изображение можно увеличить до 300 % кнопками, клавишами или Ctrl/⌘ + колесо, а затем прокрутить.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Светлая и тёмная темы получили отдельные чёткие иллюстрации разрешением 2560 × 1600.</li>
+        <li className="flex gap-3"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Карточки памятки больше не сливаются, а оценки настроения лучше видны в тёмной теме.</li>
       </ul>
       <DialogFooter className="mt-2 sm:justify-between">
         <Button type="button" variant="outline" className="min-h-11" onClick={() => { closeUpdate(); onOpenChange(true); }}><BookOpen className="h-4 w-4" />Открыть руководство</Button>
