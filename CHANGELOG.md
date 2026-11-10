@@ -2,7 +2,7 @@
 
 Здесь фиксируются заметные изменения проекта «Точка опоры». Проект использует [Semantic Versioning](https://semver.org/lang/ru/).
 
-## [Unreleased]
+## [1.5.0] — 2026-11-10
 
 ### Добавлено
 
@@ -81,6 +81,7 @@
 - Публичные формы нового пользователя очищены от персональных начальных значений.
 - Усилены автоматические проверки публикуемого содержимого.
 
+[1.5.0]: https://github.com/gankata/tochka-opory/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/gankata/tochka-opory/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/gankata/tochka-opory/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/gankata/tochka-opory/compare/v1.2.2...v1.3.0

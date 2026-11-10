@@ -64,6 +64,9 @@ npm run lint
 npm test
 npm run build
 npm run test:browser
+npm run test:browser:firefox
+npm run test:browser:webkit
+npm run test:stress
 npm run check:performance
 npm run check:windows
 npm run check:public

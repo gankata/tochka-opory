@@ -222,11 +222,11 @@ try {
   await guideDialog.getByText("1 из 6", { exact: true }).waitFor();
   await guideDialog.press("Escape");
   await guideDialog.waitFor({ state: "hidden" });
-  await page.evaluate(() => localStorage.setItem("tochka-last-seen-version", "1.3.0"));
+  await page.evaluate(() => localStorage.setItem("tochka-last-seen-version", "1.4.1"));
   await page.reload({ waitUntil: "networkidle" });
   const updateDialog = page.getByRole("dialog", { name: "Что нового", exact: true });
   await updateDialog.waitFor();
-  await updateDialog.locator("li").filter({ hasText: "Практические подсказки" }).waitFor();
+  await updateDialog.locator("li").filter({ hasText: "официальную переносимую версию" }).waitFor();
   await page.screenshot({ path: path.join(output, "guide-update-desktop.jpg"), type: "jpeg", quality: 90 });
   await updateDialog.getByRole("button", { name: "Открыть руководство", exact: true }).click();
   await guideDialog.waitFor();
