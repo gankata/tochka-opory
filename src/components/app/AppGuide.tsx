@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, ArrowRight, ArrowUpRight, BookOpen, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { GuideImage } from "@/components/app/GuideImage";
 import {
   Dialog,
   DialogContent,
@@ -197,7 +198,7 @@ export default function AppGuide({ open, onOpenChange }: AppGuideProps) {
           <div className="mt-7 hidden items-center gap-2 text-xs text-foreground/80 md:flex"><BookOpen className="h-4 w-4" />Можно вернуться сюда в любой момент</div>
         </div>
         <div className="order-1 bg-secondary/55 p-4 pt-16 sm:p-6 sm:pt-16 md:order-2 md:flex md:min-h-0 md:items-start md:p-8 md:pt-16">
-          <img key={current.image} src={current.image} alt={current.alt} className="guide-image aspect-[16/10] w-full rounded-xl border bg-card object-cover object-left-top shadow-sm md:sticky md:top-8" />
+          <GuideImage image={current.image} alt={current.alt} title={current.title} />
         </div>
       </div>
       <div className="shrink-0 border-t bg-card px-5 py-4 sm:px-7">

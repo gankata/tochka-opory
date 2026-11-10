@@ -24,11 +24,51 @@ async function assertGuideCloseClearance(guideDialog, name) {
   if (overlaps) throw new Error(`Guide close button overlaps the image: ${name}`);
 }
 
+async function assertGuideImageFit(imageViewer, name) {
+  const dimensions = await imageViewer.locator("[data-guide-image-viewport]").evaluate((element) => ({
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+  }));
+  if (dimensions.scrollWidth > dimensions.clientWidth + 1 || dimensions.scrollHeight > dimensions.clientHeight + 1) {
+    throw new Error(`Guide image does not fit at 100%: ${name}: ${JSON.stringify(dimensions)}`);
+  }
+}
+
 function rectanglesOverlap(first, second) {
   return first.x < second.x + second.width
     && first.x + first.width > second.x
     && first.y < second.y + second.height
     && first.y + first.height > second.y;
+}
+
+async function captureGuideImages(page, name) {
+  if (process.env.CAPTURE_GUIDE_IMAGES !== "1") return;
+  const directory = path.resolve("public/images/guide");
+  await fs.mkdir(directory, { recursive: true });
+  const sourceContext = page.context();
+  const browser = sourceContext.browser();
+  if (!browser) throw new Error("A browser is required to capture guide images");
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    deviceScaleFactor: 2,
+    reducedMotion: "reduce",
+    storageState: await sourceContext.storageState(),
+  });
+  const capturePage = await context.newPage();
+  try {
+    await capturePage.goto(page.url(), { waitUntil: "networkidle" });
+    for (const [theme, label, suffix] of [["light", "Светлая", ""], ["dark", "Тёмная", "-dark"]]) {
+      await capturePage.getByRole("button", { name: /Тема оформления:/ }).click();
+      await capturePage.getByRole("menuitemradio", { name: label, exact: true }).click();
+      await capturePage.waitForFunction((expected) => document.documentElement.classList.contains("dark") === (expected === "dark"), theme);
+      await capturePage.waitForTimeout(350);
+      await capturePage.screenshot({ path: path.join(directory, `${name}${suffix}.jpg`), type: "jpeg", quality: 95, fullPage: false, scale: "device" });
+    }
+  } finally {
+    await context.close();
+  }
 }
 
 function normalizedText(value) {
@@ -204,6 +244,51 @@ try {
   await assertAccessible(page, "guide-desktop");
   await assertGuideCloseClearance(guideDialog, "desktop");
   await page.screenshot({ path: path.join(output, "guide-step-desktop.jpg"), type: "jpeg", quality: 90 });
+  await guideDialog.getByRole("button", { name: /^Увеличить изображение:/ }).click();
+  const imageViewer = page.getByRole("dialog", { name: "Просмотр иллюстрации", exact: true });
+  await imageViewer.waitFor();
+  await page.waitForTimeout(350);
+  await assertGuideImageFit(imageViewer, "light desktop");
+  await page.screenshot({ path: path.join(output, "guide-image-viewer-light-desktop.jpg"), type: "jpeg", quality: 90 });
+  const initialImageBox = await imageViewer.locator(".guide-image-viewer").boundingBox();
+  await imageViewer.getByRole("button", { name: "Приблизить", exact: true }).click();
+  await imageViewer.getByText("125%", { exact: true }).waitFor();
+  const enlargedImageBox = await imageViewer.locator(".guide-image-viewer").boundingBox();
+  if (!initialImageBox || !enlargedImageBox || enlargedImageBox.width <= initialImageBox.width || enlargedImageBox.height <= initialImageBox.height) throw new Error("Guide image zoom does not enlarge the image proportionally");
+  await imageViewer.locator("[data-guide-image-viewport]").evaluate((element) => { element.scrollLeft = 40; });
+  await page.screenshot({ path: path.join(output, "guide-image-viewer-light-zoom-desktop.jpg"), type: "jpeg", quality: 90 });
+  await imageViewer.getByRole("button", { name: "По размеру экрана", exact: true }).click();
+  await imageViewer.getByText("100%", { exact: true }).waitFor();
+  await assertGuideImageFit(imageViewer, "reset desktop");
+  await assertAccessible(page, "guide-image-viewer-desktop");
+  await imageViewer.press("Escape");
+  await imageViewer.waitFor({ state: "hidden" });
+  await guideDialog.press("Escape");
+  await guideDialog.waitFor({ state: "hidden" });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.waitForFunction(() => document.documentElement.classList.contains("dark"));
+  await page.getByRole("button", { name: "Руководство", exact: true }).click();
+  await guideDialog.waitFor();
+  await page.waitForFunction(() => {
+    const image = document.querySelector(".guide-image");
+    return image instanceof HTMLImageElement && image.src.endsWith("/01-start-dark.jpg") && image.complete && image.naturalWidth > 0;
+  });
+  await page.waitForTimeout(350);
+  await page.screenshot({ path: path.join(output, "guide-step-dark-desktop.jpg"), type: "jpeg", quality: 90 });
+  await guideDialog.getByRole("button", { name: /^Увеличить изображение:/ }).click();
+  await imageViewer.waitFor();
+  await imageViewer.locator(".guide-image-viewer").waitFor();
+  await page.waitForTimeout(350);
+  await assertGuideImageFit(imageViewer, "dark desktop");
+  await page.screenshot({ path: path.join(output, "guide-image-viewer-dark-desktop.jpg"), type: "jpeg", quality: 90 });
+  await imageViewer.press("Escape");
+  await imageViewer.waitFor({ state: "hidden" });
+  await guideDialog.press("Escape");
+  await guideDialog.waitFor({ state: "hidden" });
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
+  await page.getByRole("button", { name: "Руководство", exact: true }).click();
+  await guideDialog.waitFor();
   for (let step = 2; step <= 6; step++) {
     if (await guideDialog.getByLabel("Перейти к функции", { exact: true }).getByRole("button").count() === 0) throw new Error(`Guide step ${step - 1} has no feature link`);
     await guideDialog.getByRole("button", { name: "Далее", exact: true }).click();
@@ -235,6 +320,7 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   if (await updateDialog.count()) throw new Error("Update notice must appear only once");
   await page.getByRole("heading", { name: "Всё важное — на одном экране", exact: true }).waitFor();
+  await captureGuideImages(page, "01-start");
   if (await page.getByRole("heading", { name: "Иностранная валюта", exact: true }).count()) throw new Error("A new user must not see an empty foreign currency section");
   if (await page.locator("[data-currency]").count()) throw new Error("A new user must not see empty currency cards");
 
@@ -320,6 +406,7 @@ try {
   await page.getByRole("heading", { name: "Иностранная валюта", exact: true }).waitFor({ state: "hidden" });
   await page.locator("[data-currency]").first().waitFor({ state: "hidden" });
   await page.screenshot({ path: path.join(output, "dashboard-after-full-exchange-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await captureGuideImages(page, "03-today");
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
   await page.getByText("Проверочный полный обмен", { exact: true }).first().waitFor();
 
@@ -493,9 +580,12 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("tbody tr").length > 1);
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(output, "operations-main-search-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await captureGuideImages(page, "02-operations");
 
   const desktopNav = page.getByRole("navigation", { name: "Основная навигация", exact: true });
-  if (await desktopNav.locator("a:visible, button:visible").count() !== 5) throw new Error("Desktop navigation should contain four primary links and More");
+  const desktopNavItems = desktopNav.locator("a:visible, button:visible");
+  const desktopNavCount = await desktopNavItems.count();
+  if (desktopNavCount !== 5) throw new Error(`Desktop navigation should contain four primary links and More; received ${desktopNavCount}: ${await desktopNavItems.allTextContents()}`);
   await desktopNav.getByRole("button", { name: "Ещё", exact: true }).click();
   await page.screenshot({ path: path.join(output, "desktop-more.jpg"), type: "jpeg", quality: 90, fullPage: false });
   await desktopNav.getByRole("link", { name: "Аналитика", exact: true }).click();
@@ -554,6 +644,7 @@ try {
   await page.waitForFunction(() => Array.from(document.querySelectorAll("button")).some((button) => button.textContent?.trim() === "12 мес." && button.getAttribute("aria-pressed") === "true"));
   await page.waitForTimeout(350);
   await page.screenshot({ path: path.join(output, "analytics-active-saved-view-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await captureGuideImages(page, "05-analytics");
   await page.getByRole("button", { name: "Удалить представление", exact: true }).click();
   const deleteViewDialog = page.getByRole("alertdialog", { name: "Удалить «Расходы за 6 месяцев»?", exact: true });
   await deleteViewDialog.waitFor();
@@ -687,6 +778,7 @@ try {
   await internalLink.click();
   await page.waitForFunction(() => document.querySelector('input[aria-label="Название страницы"]')?.value === "Идеи для поездки");
   await page.getByRole("button", { name: "План поездки", exact: true }).last().waitFor();
+  await captureGuideImages(page, "04-notes");
 
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR4nGP8z8DAwMDAxMDAwMAAAAwAAf8B9pQAAAAASUVORK5CYII=", "base64");
   await page.getByLabel("Выбрать изображения", { exact: true }).setInputFiles({ name: "place.png", mimeType: "image/png", buffer: png });
@@ -851,9 +943,18 @@ try {
   ]);
   if (!privacyDocument.ok() || !(await privacyDocument.text()).includes("## English")) throw new Error("Bilingual privacy document is unavailable offline");
   if (!disclaimerDocument.ok() || !(await disclaimerDocument.text()).includes("## English")) throw new Error("Bilingual disclaimer is unavailable offline");
+  const helpCardSpacing = async () => {
+    const upper = await page.getByRole("heading", { name: "Хранение наличных", exact: true }).evaluate((element) => element.closest("section").getBoundingClientRect().toJSON());
+    const about = await page.getByRole("heading", { name: "О приложении", exact: true }).evaluate((element) => element.closest("section").getBoundingClientRect().toJSON());
+    return about.y - (upper.y + upper.height);
+  };
+  const desktopHelpGap = await helpCardSpacing();
+  if (desktopHelpGap < 19) throw new Error(`Help cards touch or overlap on desktop: ${desktopHelpGap}`);
   await page.screenshot({ path: path.join(output, "about-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
   await page.setViewportSize({ width: 375, height: 812 });
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("About section overflows on mobile");
+  const mobileHelpGap = await helpCardSpacing();
+  if (mobileHelpGap < 19) throw new Error(`Help cards touch or overlap on mobile: ${mobileHelpGap}`);
   await page.screenshot({ path: path.join(output, "about-mobile.jpg"), type: "jpeg", quality: 88, fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
 
@@ -878,6 +979,7 @@ try {
   await page.getByRole("button", { name: "Создать SQLite-копию", exact: true }).click();
   await page.getByText("Независимая SQLite-копия создана и проверена", { exact: true }).waitFor();
   await page.waitForFunction((before) => Array.from(document.querySelectorAll("button")).filter((button) => button.textContent === "Восстановить файл").length === before + 1, fileCopiesBefore);
+  await captureGuideImages(page, "06-backup");
 
   await page.goto(`${origin}/data?tab=imports`, { waitUntil: "networkidle" });
   await page.getByLabel("Название", { exact: true }).fill("Кофейни");
@@ -1086,6 +1188,19 @@ try {
   await assertGuideCloseClearance(guideDialog, "mobile");
   if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mobile guide horizontal overflow");
   await page.screenshot({ path: path.join(output, "guide-step-mobile.jpg"), type: "jpeg", quality: 90 });
+  await guideDialog.getByRole("button", { name: /^Увеличить изображение:/ }).click();
+  await imageViewer.waitFor();
+  await page.waitForTimeout(350);
+  await assertGuideImageFit(imageViewer, "mobile");
+  await page.screenshot({ path: path.join(output, "guide-image-viewer-mobile.jpg"), type: "jpeg", quality: 90 });
+  await imageViewer.getByRole("button", { name: "Приблизить", exact: true }).click();
+  await imageViewer.getByText("125%", { exact: true }).waitFor();
+  const mobileViewerBox = await imageViewer.boundingBox();
+  if (!mobileViewerBox || mobileViewerBox.x < 0 || mobileViewerBox.x + mobileViewerBox.width > 375 || mobileViewerBox.height > 812) throw new Error("Mobile guide image viewer is clipped");
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mobile guide image viewer causes horizontal overflow");
+  await page.screenshot({ path: path.join(output, "guide-image-viewer-zoom-mobile.jpg"), type: "jpeg", quality: 90 });
+  await imageViewer.press("Escape");
+  await imageViewer.waitFor({ state: "hidden" });
   const guideScroll = guideDialog.locator(".grid.min-h-0");
   const guideScrolled = await guideScroll.evaluate((element) => {
     if (element.scrollHeight <= element.clientHeight) return false;
