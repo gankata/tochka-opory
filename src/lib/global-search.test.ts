@@ -13,7 +13,7 @@ function workspace(patch: Partial<Workspace> = {}): Workspace {
       walletDays: 3, largeExpenseThreshold: 10000, currencyRates: {}, currencyBalances: {}, ...stamps,
     },
     transactions: [], payments: [], envelopes: [], goals: [], moods: [], options: [], notes: [],
-    reminders: [], reconciliations: [], ...patch,
+    incomeSources: [], reminders: [], reconciliations: [], ...patch,
   };
 }
 

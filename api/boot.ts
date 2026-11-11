@@ -13,11 +13,9 @@ import { Paths } from "@contracts/constants";
 import { log } from "./lib/logger";
 import { handleClientLog } from "./lib/clientlog";
 import { REQUEST_ID_HEADER, runWithRequestId } from "./lib/requestcontext";
-import { registerPublicApi } from "./lib/public-api";
 import { applySecurityHeaders, hasAllowedOrigin } from "./lib/security-headers";
-import type { apiTokens } from "@db/schema";
 
-const app = new Hono<{ Bindings: HttpBindings; Variables: { apiToken: typeof apiTokens.$inferSelect } }>();
+const app = new Hono<{ Bindings: HttpBindings }>();
 
 // One middleware for both halves of request observability, because they need the
 // same scope and the same id:
@@ -98,7 +96,6 @@ app.get("/api/note-assets/:id", async (c) => {
     "X-Content-Type-Options": "nosniff",
   });
 });
-registerPublicApi(app);
 // Browser-side log sink (see lib/clientlog.ts). Must be registered before the
 // /api/* 404 catch-all below. bodyLimit guards it too: lib/clientlog.ts caps the
 // body itself, but only AFTER Hono has read it into memory, and this route sits

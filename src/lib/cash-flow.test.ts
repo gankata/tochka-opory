@@ -34,6 +34,19 @@ describe("прогноз денежного потока", () => {
     expect(result.map((payment) => payment.isoDate)).toEqual(["2026-11-25", "2026-12-15", "2026-12-25"]);
   });
 
+  it("перечисляет несколько именованных источников без предположения их сумм", () => {
+    const result = buildUnconfirmedIncomeSchedule({
+      incomeSchedule: "twice", salaryDay: 15, secondSalaryDay: null,
+      incomeSources: [{ name: "Аренда", dayOfMonth: 5 }, { name: "Зарплата", dayOfMonth: 15 }],
+    }, "2026-11-01", "2026-11-30");
+
+    expect(result.map(({ label, isoDate }) => ({ label, isoDate }))).toEqual([
+      { label: "Аренда", isoDate: "2026-11-05" },
+      { label: "Зарплата", isoDate: "2026-11-13" },
+    ]);
+    expect(result.every((payment) => !("amount" in payment))).toBe(true);
+  });
+
   it("не создаёт плановых дат для нерегулярного дохода и не теряет выплату на границе периода", () => {
     expect(buildUnconfirmedIncomeSchedule({ incomeSchedule: "irregular", salaryDay: 15, secondSalaryDay: null }, "2026-11-13", "2026-12-31")).toEqual([]);
     const monthly = buildUnconfirmedIncomeSchedule({ incomeSchedule: "monthly", salaryDay: 1, secondSalaryDay: null }, "2027-01-31", "2027-05-01");

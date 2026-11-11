@@ -1,9 +1,10 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "./connection";
 import {
-  activities, appSettings, assetEntries, backups, envelopes, goals, importBatches, moodEntries, moodOptions,
+  activities, appSettings, assetEntries, backups, envelopes, goals, importBatches, incomeSources, moodEntries, moodOptions,
   noteAssets, notes, payments, reconciliations, reminders, transactionRules, transactions,
 } from "@db/schema";
+import { legacyIncomeSources } from "@contracts/incomeSchedule";
 import {
   defaultMoodOptions, importedEnvelopes, importedPayments, importedReminders,
   importedSettings, importedTransactions,
@@ -14,7 +15,7 @@ export async function fetchWorkspace(userId: number) {
   const db = getDb();
   const [
     settingsRows, transactionRows, paymentRows, envelopeRows, goalRows,
-    moodRows, optionRows, noteRows, reminderRows, reconciliationRows,
+    moodRows, optionRows, noteRows, reminderRows, reconciliationRows, incomeSourceRows,
   ] = await Promise.all([
     db.select().from(appSettings).where(eq(appSettings.userId, userId)).limit(1),
     db.select().from(transactions).where(eq(transactions.userId, userId)).orderBy(desc(transactions.operationDate), desc(transactions.id)),
@@ -26,9 +27,11 @@ export async function fetchWorkspace(userId: number) {
     db.select().from(notes).where(eq(notes.userId, userId)).orderBy(asc(notes.sortOrder), asc(notes.id)),
     db.select().from(reminders).where(eq(reminders.userId, userId)).orderBy(asc(reminders.startAt)),
     db.select().from(reconciliations).where(eq(reconciliations.userId, userId)).orderBy(desc(reconciliations.createdAt)),
+    db.select().from(incomeSources).where(eq(incomeSources.userId, userId)).orderBy(asc(incomeSources.sortOrder), asc(incomeSources.id)),
   ]);
   return {
     settings: settingsRows[0] ?? null,
+    incomeSources: incomeSourceRows,
     transactions: transactionRows,
     payments: paymentRows,
     envelopes: envelopeRows,
@@ -95,6 +98,8 @@ export async function ensureWorkspace(userId: number, snapshotCreator = createSn
 
   await db.transaction(async (tx) => {
     await tx.insert(appSettings).values({ userId, ...importedSettings });
+    const initialIncomeSources = legacyIncomeSources(importedSettings);
+    if (initialIncomeSources.length) await tx.insert(incomeSources).values(initialIncomeSources.map((source, sortOrder) => ({ ...source, userId, sortOrder })));
     if (importedTransactions.length) await tx.insert(transactions).values(importedTransactions.map((row) => ({ ...row, userId })));
     if (importedPayments.length) await tx.insert(payments).values(importedPayments.map((row) => ({ ...row, userId })));
     await tx.insert(envelopes).values(importedEnvelopes.map(([name, required, estimatedAmount, note], sortOrder) => ({

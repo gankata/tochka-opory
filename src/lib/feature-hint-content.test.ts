@@ -48,8 +48,8 @@ describe("feature hint content", () => {
 
   it("covers dynamic headings", () => {
     expect(getFeatureHintText("Годовая карта · 2026")).toContain("Нажмите на клетку");
-    expect(getFeatureHintText("Зарплата сегодня")).toContain("Нажмите на дату выплаты");
-    expect(getFeatureHintText("До зарплаты: 12 дн.")).toBe(getFeatureHintText("Зарплата сегодня"));
+    expect(getFeatureHintText("Доход сегодня")).toContain("Нажмите на дату поступления");
+    expect(getFeatureHintText("До поступления: 12 дн.")).toBe(getFeatureHintText("Доход сегодня"));
     expect(getFeatureHintText("Динамика расходов")).toContain("«График» и «Таблицу»");
     expect(getFeatureHintText("Динамика доходов")).toBe(getFeatureHintText("Динамика расходов"));
   });

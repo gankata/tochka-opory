@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import { trpc } from "@/providers/trpc";
 import { Button } from "@/components/ui/button";
 import { Field, Section } from "./Common";
-import ApiAccess from "./ApiAccess";
 
 export default function AccountSecurity() {
   const account = trpc.auth.account.useQuery();
@@ -41,6 +40,5 @@ export default function AccountSecurity() {
       <div className="lg:col-span-3">{error && <p role="alert" className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}<Button type="submit" className="min-h-11 gap-2" disabled={change.isPending}>{change.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}Сменить пароль</Button></div>
     </form>
     <div className="mt-6 border-t pt-5 text-sm leading-relaxed"><p className="font-medium">Забыли пароль?</p><p className="mt-1 text-muted-foreground">Откройте Терминал в папке проекта на MacBook и выполните <code className="rounded bg-secondary px-1.5 py-0.5">npm run auth:reset</code>. Команда попросит новый пароль, не показывая его на экране, и завершит все старые сессии. Права root не нужны.</p></div>
-    <ApiAccess />
   </Section>;
 }

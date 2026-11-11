@@ -8,6 +8,5 @@ export type Goal = Workspace["goals"][number];
 export type MoodEntry = Workspace["moods"][number];
 export type MoodOption = Workspace["options"][number];
 export type Note = Workspace["notes"][number];
-export type Reminder = Workspace["reminders"][number];
 export type Settings = NonNullable<Workspace["settings"]>;
 export type BackupInfo = RouterOutputs["workspace"]["backupList"]["items"][number];

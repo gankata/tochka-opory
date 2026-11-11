@@ -3,12 +3,12 @@ import { and, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { isIncomeOnlyCategory, normalizeOperationCategory } from "@contracts/operationCategories";
 import { currencyCodes, isCurrencyCode } from "@contracts/currencies";
-import { incomeScheduleTypes } from "@contracts/incomeSchedule";
+import { incomeScheduleTypes, legacyIncomeSources } from "@contracts/incomeSchedule";
 import { noteKinds, wishlistPriorities, type NoteExport } from "@contracts/notes";
 import { adminQuery, createRouter } from "./middleware";
 import { getDb } from "./queries/connection";
 import {
-  appSettings, assetEntries, backups, envelopes, goals, importBatches, moodEntries, moodOptions, noteAssets, notes, payments,
+  appSettings, assetEntries, backups, envelopes, goals, importBatches, incomeSources, moodEntries, moodOptions, noteAssets, notes, payments,
   reconciliations, reminders, transactionRules, transactions,
 } from "@db/schema";
 import {
@@ -111,6 +111,11 @@ const noteAssetInput = z.object({
   mime: z.enum(["image/png", "image/jpeg", "image/webp", "image/gif"]),
   data: z.string().min(4).max(12_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/),
 });
+const incomeSourceInput = z.object({
+  name: z.string().trim().min(1).max(160),
+  dayOfMonth: z.number().int().min(1).max(31).nullable(),
+  sortOrder: z.number().int().min(0).max(1_000_000),
+});
 const settingsInput = z.object({
   startDate: dateString,
   cashRub: z.number().finite().nonnegative(),
@@ -121,6 +126,7 @@ const settingsInput = z.object({
   salaryDay: z.number().int().min(1).max(31),
   secondSalaryDay: z.number().int().min(1).max(31).nullish(),
   incomeSchedule: z.enum(incomeScheduleTypes),
+  incomeSources: z.array(incomeSourceInput).max(10000).optional(),
   mode: z.enum(["Обычный", "Экономия"]),
   savingPercent: z.number().int().min(0).max(90),
   trackingDays: z.number().int().min(1).max(365),
@@ -149,6 +155,7 @@ const reconciliationInput = z.object({
 
 const snapshotSchema = z.object({
   settings: z.object({ startDate: dateString }).passthrough(),
+  incomeSources: z.array(incomeSourceInput.passthrough()).max(10000).optional(),
   transactions: z.array(transactionInput.passthrough()).max(50000),
   payments: z.array(paymentInput.passthrough()).max(10000),
   envelopes: z.array(envelopeInput.passthrough()).max(10000),
@@ -359,13 +366,17 @@ function decodeNoteAsset(data: string, mime: z.infer<typeof noteAssetInput>["mim
 async function applySnapshot(userId: number, payload: SnapshotInput) {
   const db = getDb();
   await db.transaction(async (tx) => {
-    for (const table of [noteAssets, transactions, importBatches, transactionRules, assetEntries, payments, envelopes, goals, moodEntries, moodOptions, notes, reminders, reconciliations]) {
+    for (const table of [noteAssets, transactions, importBatches, transactionRules, assetEntries, payments, envelopes, goals, moodEntries, moodOptions, notes, reminders, reconciliations, incomeSources]) {
       await tx.delete(table).where(eq(table.userId, userId));
     }
     await tx.delete(appSettings).where(eq(appSettings.userId, userId));
     const settings = { ...payload.settings } as Record<string, unknown>;
     for (const key of ["id", "userId", "createdAt", "updatedAt"]) delete settings[key];
     await tx.insert(appSettings).values({ ...settings, userId } as typeof appSettings.$inferInsert);
+    const restoredIncomeSources = payload.incomeSources ?? legacyIncomeSources(payload.settings as unknown as Parameters<typeof legacyIncomeSources>[0]);
+    if (restoredIncomeSources.length) await tx.insert(incomeSources).values(restoredIncomeSources.map((source, sortOrder) => ({
+      userId, name: source.name, dayOfMonth: source.dayOfMonth, sortOrder,
+    })));
 
     const batchIdMap = new Map<number, number>();
     for (const source of payload.importBatches) {
@@ -474,8 +485,17 @@ export const workspaceRouter = createRouter({
   }),
 
   settingsUpdate: adminQuery.input(settingsInput).mutation(async ({ ctx, input }) => {
-    await getDb().update(appSettings).set(input).where(eq(appSettings.userId, ctx.user.id));
-    await recordActivity(ctx.user.id, "update", "settings", null, "Обновлены настройки и стартовые остатки");
+    const { incomeSources: nextIncomeSources, ...settingsPatch } = input;
+    await getDb().transaction(async (tx) => {
+      if (Object.keys(settingsPatch).length) {
+        await tx.update(appSettings).set(settingsPatch).where(eq(appSettings.userId, ctx.user.id));
+      }
+      if (nextIncomeSources !== undefined) {
+        await tx.delete(incomeSources).where(eq(incomeSources.userId, ctx.user.id));
+        if (nextIncomeSources.length) await tx.insert(incomeSources).values(nextIncomeSources.map((source) => ({ ...source, userId: ctx.user.id })));
+      }
+    });
+    await recordActivity(ctx.user.id, "update", "settings", null, "Обновлены настройки, стартовые остатки и источники дохода");
     return { ok: true };
   }),
 

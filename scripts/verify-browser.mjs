@@ -327,7 +327,7 @@ try {
   await page.getByRole("button", { name: "Руководство", exact: true }).click();
   await guideDialog.waitFor();
   await guideDialog.getByText("Дата остатков — точка начала расчёта.", { exact: false }).waitFor();
-  await guideDialog.getByText("Тип и дни можно менять в любой момент", { exact: false }).waitFor();
+  await guideDialog.getByText("В настройках добавьте любые регулярные источники дохода", { exact: false }).waitFor();
   await guideDialog.getByRole("button", { name: "Настроить график дохода", exact: true }).waitFor();
   await guideDialog.getByRole("button", { name: "Указать остатки", exact: true }).click();
   await page.waitForURL(`${origin}/data?tab=settings`);
@@ -348,7 +348,7 @@ try {
   await page.mouse.move(0, 0);
   await hintContent.waitFor({ state: "hidden" });
 
-  const incomeHint = page.getByRole("button", { name: "Подсказка: График дохода", exact: true });
+  const incomeHint = page.getByRole("button", { name: "Подсказка: График и источники дохода", exact: true });
   await incomeHint.click();
   await hintContent.getByText("главная, календарь и связанные прогнозы — после сохранения настроек", { exact: false }).waitFor();
   await hintContent.getByText("Уже внесённые доходы и расходы останутся без изменений.", { exact: false }).waitFor();
@@ -371,7 +371,53 @@ try {
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  if (await page.getByLabel("Наличные, $", { exact: true }).count()) throw new Error("USD must be optional for a new profile");
+  for (const legacyLabel of ["Дней учёта до опоры на факт", "Дней наличных в кошельке"]) {
+    if (await page.getByText(legacyLabel, { exact: true }).count()) throw new Error(`Unused setting is still visible: ${legacyLabel}`);
+  }
+  if (await page.getByRole("tab", { name: "Напоминания", exact: true }).count()) throw new Error("Removed reminders tab is still visible");
+  for (const [label, min, max] of [["Экономия на переменных, %", "0", "90"], ["Запас, месяцев", "0", "120"], ["Месяцев в статистике", "1", "60"], ["День месяца 1", "1", "31"]]) {
+    const input = page.getByLabel(label, { exact: true });
+    const original = await input.inputValue();
+    const attributes = await input.evaluate((element) => ({ type: element.type, min: element.min, max: element.max, step: element.step, required: element.required }));
+    if (attributes.type !== "number" || attributes.min !== min || attributes.max !== max || attributes.step !== "1" || !attributes.required) throw new Error(`Integer input constraints are wrong for ${label}: ${JSON.stringify(attributes)}`);
+    await input.fill("1.5");
+    if (await input.evaluate((element) => element.validity.valid)) throw new Error(`Fractional value must be invalid for ${label}`);
+    await input.fill(original);
+  }
+  const rubBalance = page.getByLabel("Наличные, ₽", { exact: true });
+  const originalRubBalance = await rubBalance.inputValue();
+  await rubBalance.fill("1234,56");
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  if (await rubBalance.inputValue() !== "1234.56") throw new Error("Decimal comma was not preserved in a money setting");
+  await rubBalance.fill(originalRubBalance);
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
+  const restoredBalanceToast = page.locator("[data-sonner-toast]").filter({ hasText: "Настройки и валютные курсы сохранены" }).last();
+  await restoredBalanceToast.getByRole("button", { name: "Закрыть уведомление", exact: true }).click();
+  await restoredBalanceToast.waitFor({ state: "hidden" });
+
+  await page.getByRole("tab", { name: "Памятка", exact: true }).click();
+  await page.waitForURL(`${origin}/data?tab=help`);
+  await page.getByRole("tab", { name: "Настройки", exact: true }).click();
+  await page.waitForURL(`${origin}/data?tab=settings`);
+  await page.goBack({ waitUntil: "networkidle" });
+  await page.waitForURL(`${origin}/data?tab=help`);
+  if (await page.getByRole("tab", { name: "Памятка", exact: true }).getAttribute("aria-selected") !== "true") throw new Error("Back navigation did not restore the help tab");
+  await page.goForward({ waitUntil: "networkidle" });
+  await page.waitForURL(`${origin}/data?tab=settings`);
+
+  await page.getByLabel("Новая валюта", { exact: true }).selectOption("USD");
+  await page.getByRole("button", { name: "Добавить валюту", exact: true }).click();
   await page.getByLabel("Наличные, $", { exact: true }).fill("100");
+  const usdCashBox = await page.getByLabel("Наличные, $", { exact: true }).boundingBox();
+  const usdRateBox = await page.locator("label").filter({ hasText: "Курс ₽ за $1" }).locator("input").boundingBox();
+  const usdRemoveBox = await page.getByRole("button", { name: "Убрать USD", exact: true }).boundingBox();
+  if (!usdCashBox || !usdRateBox || !usdRemoveBox) throw new Error("USD settings layout is not measurable");
+  if (Math.abs(usdCashBox.y - usdRateBox.y) > 2 || Math.abs(usdCashBox.y - usdRemoveBox.y) > 2) throw new Error(`USD settings controls are misaligned: ${JSON.stringify({ usdCashBox, usdRateBox, usdRemoveBox })}`);
+  await page.screenshot({ path: path.join(output, "settings-usd-layout-desktop.jpg"), type: "jpeg", quality: 92, fullPage: false });
   await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
   await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
   await assertToastLayout(page, output, "desktop");
@@ -413,6 +459,12 @@ try {
   await page.locator("[data-currency]").first().waitFor({ state: "hidden" });
   await page.screenshot({ path: path.join(output, "dashboard-after-full-exchange-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
   await captureGuideImages(page, "03-today");
+  await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
+  await page.getByText("Проверочный полный обмен", { exact: true }).first().waitFor();
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  if (await page.getByLabel("Наличные, $", { exact: true }).count()) throw new Error("USD history must not force an empty starting balance to stay visible");
+  await page.reload({ waitUntil: "networkidle" });
+  if (await page.getByLabel("Наличные, $", { exact: true }).count()) throw new Error("USD starting balance reappeared after a full exchange");
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
   await page.getByText("Проверочный полный обмен", { exact: true }).first().waitFor();
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
@@ -525,32 +577,46 @@ try {
     await page.reload({ waitUntil: "networkidle" });
   };
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
-  if (await incomeScheduleSelect.inputValue() !== "twice") throw new Error("Legacy settings must retain the twice-monthly schedule");
-  await page.getByLabel("Первая выплата, день", { exact: true }).fill("10");
-  await page.getByLabel("Правило второй выплаты", { exact: true }).selectOption("custom");
-  await page.getByLabel("Вторая выплата, день", { exact: true }).fill("25");
+  if (await incomeScheduleSelect.inputValue() !== "regular") throw new Error("Legacy settings must retain a regular schedule");
+  if (await page.getByLabel("Название источника 2", { exact: true }).count() !== 1) throw new Error("Legacy settings must migrate to two named sources");
+  await page.getByLabel("Название источника 1", { exact: true }).fill("Основная работа");
+  await page.getByLabel("День месяца 1", { exact: true }).fill("10");
+  await page.getByLabel("Название источника 2", { exact: true }).fill("Дополнительная работа");
+  await page.getByLabel("Правило даты 2", { exact: true }).selectOption("day-of-month");
+  await page.getByLabel("День месяца 2", { exact: true }).fill("25");
+  await page.getByRole("button", { name: "Добавить источник дохода", exact: true }).click();
+  await page.getByLabel("Название источника 3", { exact: true }).fill("Аренда квартиры");
+  await page.getByLabel("День месяца 3", { exact: true }).fill("5");
   await saveIncomeSchedule();
-  if (await page.getByLabel("Первая выплата, день", { exact: true }).inputValue() !== "10" || await page.getByLabel("Вторая выплата, день", { exact: true }).inputValue() !== "25") throw new Error("Custom income days were not persisted");
+  if (await page.getByLabel("Название источника 3", { exact: true }).inputValue() !== "Аренда квартиры") throw new Error("Third income source was not persisted");
+  if (await page.getByLabel("День месяца 1", { exact: true }).inputValue() !== "10" || await page.getByLabel("День месяца 2", { exact: true }).inputValue() !== "25" || await page.getByLabel("День месяца 3", { exact: true }).inputValue() !== "5") throw new Error("Custom income source days were not persisted");
   await page.getByText("Ближайшие плановые даты", { exact: true }).waitFor();
   await page.screenshot({ path: path.join(output, "income-schedule-custom-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
   await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
-  await page.getByText("Первая зарплата · 10-е число", { exact: true }).waitFor();
-  await page.getByText("Вторая зарплата · 25-е число", { exact: true }).waitFor();
+  await page.getByText("Основная работа · 10-е число", { exact: true }).waitFor();
+  await page.getByText("Дополнительная работа · 25-е число", { exact: true }).waitFor();
+  await page.getByText("Аренда квартиры · 5-е число", { exact: true }).waitFor();
+  if (await page.locator('section[aria-label="Плановые даты дохода выбранного месяца"] .number').count() !== 3) throw new Error("Calendar must show all three named sources");
   await assertAccessible(page, "income-schedule-custom-calendar-desktop");
   await page.screenshot({ path: path.join(output, "income-calendar-custom-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Подробный обзор", exact: true }).click();
-  await page.getByText("Первая зарплата · 10-е число", { exact: true }).waitFor();
-  await page.getByText("Вторая зарплата · 25-е число", { exact: true }).waitFor();
+  await page.getByText("Дополнительная работа · 25-е число", { exact: true }).waitFor();
+  await page.getByText("Аренда квартиры · 5-е число", { exact: true }).waitFor();
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
-  await incomeScheduleSelect.selectOption("monthly");
-  await page.getByLabel("День выплаты", { exact: true }).fill("20");
+  await page.getByRole("button", { name: "Удалить источник 3", exact: true }).click();
   await saveIncomeSchedule();
-  if (await incomeScheduleSelect.inputValue() !== "monthly") throw new Error("Monthly income schedule was not persisted");
-  await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
-  await page.getByText("Зарплата · 20-е число", { exact: true }).waitFor();
-  if (await page.locator('section[aria-label="Зарплатные даты выбранного месяца"] .number').count() !== 1) throw new Error("Monthly schedule must show exactly one planned date");
+  if (await page.getByLabel("Название источника 3", { exact: true }).count()) throw new Error("Deleted income source returned after reload");
+  await page.getByRole("button", { name: "Добавить источник дохода", exact: true }).click();
+  await page.getByLabel("Название источника 3", { exact: true }).fill("Аренда квартиры");
+  await page.getByLabel("День месяца 3", { exact: true }).fill("5");
+  await saveIncomeSchedule();
+  await page.setViewportSize({ width: 375, height: 812 });
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Named income sources overflow on mobile");
+  await assertAccessible(page, "income-schedule-custom-settings-mobile");
+  await page.screenshot({ path: path.join(output, "income-schedule-custom-mobile.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
   await incomeScheduleSelect.selectOption("irregular");
@@ -559,15 +625,15 @@ try {
   if (await incomeScheduleSelect.inputValue() !== "irregular") throw new Error("Irregular income schedule was not persisted");
   await page.goto(`${origin}/calendar`, { waitUntil: "networkidle" });
   await page.getByRole("heading", { name: "Доходы без фиксированного графика", exact: true }).waitFor();
-  if (await page.getByRole("button", { name: "Зарплата", exact: true }).count()) throw new Error("Irregular calendar must hide the salary filter");
-  if (await page.getByText("Плановая дата", { exact: true }).count()) throw new Error("Irregular calendar must not contain salary plans");
+  if (await page.getByRole("button", { name: "Плановые доходы", exact: true }).count()) throw new Error("Irregular calendar must hide the planned income filter");
+  if (await page.getByText("Плановая дата", { exact: true }).count()) throw new Error("Irregular calendar must not contain income plans");
   await page.locator('button[aria-describedby="calendar-day-2026-11-01-description"]').click();
   await page.getByText("Проверочный доход", { exact: true }).first().waitFor();
   await assertAccessible(page, "income-schedule-irregular-calendar-desktop");
   await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Подробный обзор", exact: true }).click();
   await page.getByRole("heading", { name: "Доход без фиксированных дат", exact: true }).waitFor();
-  if (await page.getByText(/До зарплаты:/).count()) throw new Error("Irregular dashboard must not show a salary countdown");
+  if (await page.getByText(/До поступления:/).count()) throw new Error("Irregular dashboard must not show an income countdown");
   await page.screenshot({ path: path.join(output, "income-irregular-dashboard-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
   await page.getByRole("button", { name: "Добавить доход", exact: true }).click();
   const irregularIncomeDialog = page.getByRole("dialog", { name: "Новая операция", exact: true });
@@ -585,11 +651,11 @@ try {
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
-  await incomeScheduleSelect.selectOption("twice");
-  await page.getByLabel("Первая выплата, день", { exact: true }).fill("15");
-  await page.getByLabel("Правило второй выплаты", { exact: true }).selectOption("last-working");
+  await incomeScheduleSelect.selectOption("regular");
+  if (await page.getByLabel("Название источника 3", { exact: true }).inputValue() !== "Аренда квартиры") throw new Error("Irregular mode did not preserve saved sources");
+  await page.getByLabel("Правило даты 2", { exact: true }).selectOption("last-working");
   await saveIncomeSchedule();
-  if (await page.getByLabel("Правило второй выплаты", { exact: true }).inputValue() !== "last-working") throw new Error("Default second salary rule was not restored");
+  if (await page.getByLabel("Правило даты 2", { exact: true }).inputValue() !== "last-working") throw new Error("Last-working-day rule was not restored");
 
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
   const journalSearch = page.getByLabel("Поиск операций", { exact: true });
@@ -628,7 +694,10 @@ try {
   await cashFlowAlert.waitFor();
   const unconfirmedIncomeSchedule = page.getByTestId("unconfirmed-income-schedule");
   await unconfirmedIncomeSchedule.getByText("Их суммы не угадываются по прошлым месяцам.", { exact: false }).waitFor();
-  if (await unconfirmedIncomeSchedule.locator("li").count() < 1) throw new Error("Forecast must show scheduled paydays without inventing amounts");
+  if (await unconfirmedIncomeSchedule.locator("li").count() < 3) throw new Error("Forecast must show all named income sources without inventing amounts");
+  await unconfirmedIncomeSchedule.getByText(/Основная работа:/).first().waitFor();
+  await unconfirmedIncomeSchedule.getByText(/Дополнительная работа:/).first().waitFor();
+  await unconfirmedIncomeSchedule.getByText(/Аренда квартиры:/).first().waitFor();
   await page.getByText("0 ₽ — граница бюджета", { exact: true }).waitFor();
   const cashFlowChart = page.locator(".cash-flow-chart");
   const deficitArea = cashFlowChart.locator(".recharts-reference-area .recharts-reference-area-rect");
@@ -1070,7 +1139,8 @@ try {
   const archive = JSON.parse(await fs.readFile(await archiveDownload.path(), "utf8"));
   if (archive.noteAssets?.length !== 1 || archive.noteAssets[0].data !== png.toString("base64")) throw new Error("Full archive did not preserve image bytes");
   if (!archive.notes.some((note) => note.document?.content)) throw new Error("Full archive lost rich documents");
-  if (archive.settings?.incomeSchedule !== "twice" || archive.settings?.salaryDay !== 15 || archive.settings?.secondSalaryDay !== null) throw new Error("Full archive did not preserve the income schedule");
+  if (archive.settings?.incomeSchedule !== "twice" || archive.incomeSources?.length !== 3) throw new Error("Full archive did not preserve the named income sources");
+  if (archive.incomeSources[0]?.name !== "Основная работа" || archive.incomeSources[1]?.name !== "Дополнительная работа" || archive.incomeSources[1]?.dayOfMonth !== null || archive.incomeSources[2]?.name !== "Аренда квартиры" || archive.incomeSources[2]?.dayOfMonth !== 5) throw new Error("Full archive changed income source names or rules");
 
   await page.getByRole("button", { name: "Создать копию", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
@@ -1122,24 +1192,9 @@ try {
   await page.screenshot({ path: path.join(output, "assets-filled-desktop.jpg"), type: "jpeg", quality: 88, fullPage: true });
 
   await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
-  await page.getByLabel("Название токена", { exact: true }).fill("Проверочный API");
-  await page.getByLabel("Права", { exact: true }).selectOption("write");
-  await page.getByRole("button", { name: "Создать токен", exact: true }).click();
-  const tokenValue = await page.getByLabel("Новый токен API", { exact: true }).innerText();
-  if (!tokenValue.startsWith("top_")) throw new Error("API token was not shown");
-  const noToken = await page.request.get(`${origin}/api/v1/transactions`);
-  if (noToken.status() !== 401) throw new Error("Public API is open without a token");
-  const authorized = await page.request.get(`${origin}/api/v1/transactions?limit=2`, { headers: { Authorization: `Bearer ${tokenValue}` } });
-  if (!authorized.ok() || (await authorized.json()).items.length !== 2) throw new Error("Authorized API read failed");
-  const apiOperation = { operationDate: "2026-11-06", type: "Доход", category: "API", amountRub: 77, originalAmount: 77, currency: "RUB", exchangeRate: 1, clientId: crypto.randomUUID() };
-  const apiCreated = await page.request.post(`${origin}/api/v1/transactions`, { headers: { Authorization: `Bearer ${tokenValue}` }, data: apiOperation });
-  if (apiCreated.status() !== 201) throw new Error(`API create failed: ${await apiCreated.text()}`);
-  const apiRepeated = await page.request.post(`${origin}/api/v1/transactions`, { headers: { Authorization: `Bearer ${tokenValue}` }, data: apiOperation });
-  if (!(await apiRepeated.json()).idempotent) throw new Error("API idempotency failed");
-  await page.getByRole("button", { name: "Отозвать", exact: true }).click();
-  await page.getByText("Доступ по токену отозван", { exact: true }).waitFor();
-  const revoked = await page.request.get(`${origin}/api/v1/transactions`, { headers: { Authorization: `Bearer ${tokenValue}` } });
-  if (revoked.status() !== 401) throw new Error("Revoked token still works");
+  if (await page.getByText("Локальный API", { exact: true }).count()) throw new Error("Removed public API controls are still visible");
+  const removedApi = await page.request.get(`${origin}/api/v1/transactions`);
+  if (removedApi.status() !== 404) throw new Error("Removed public API endpoint is still available");
 
   secondContext = await browser.newContext({
     viewport: { width: 390, height: 844 },
@@ -1440,7 +1495,7 @@ try {
     await page.goto(`${origin}/plan?tab=${tab}`, { waitUntil: "networkidle" });
     await assertPracticalFeatureHints(page, `plan-${tab}`);
   }
-  for (const tab of ["backups", "imports", "settings", "reminders", "options", "help"]) {
+  for (const tab of ["backups", "imports", "settings", "options", "help"]) {
     await page.goto(`${origin}/data?tab=${tab}`, { waitUntil: "networkidle" });
     await assertPracticalFeatureHints(page, `data-${tab}`);
   }

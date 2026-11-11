@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { createClient as createSqlClient } from "@libsql/client";
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
+import { createTRPCClient, httpLink } from "@trpc/client";
 import { chromium } from "playwright";
 import superjson from "superjson";
 
@@ -67,7 +67,7 @@ async function stopServer(signal = "SIGTERM") {
 
 let sessionCookie = "";
 const client = createTRPCClient({
-  links: [httpBatchLink({
+  links: [httpLink({
     url: `${origin}/api/trpc`,
     transformer: superjson,
     async fetch(input, init) {
@@ -99,12 +99,8 @@ function operation(clientId, note, amount = 25) {
 }
 
 async function apiPost(payload) {
-  const response = await fetch(`${origin}/api/v1/transactions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json", Origin: origin },
-    body: JSON.stringify(payload),
-  });
-  return { status: response.status, body: await response.json() };
+  const body = await client.workspace.transactionCreate.mutate(payload);
+  return { status: 201, body };
 }
 
 async function databaseVerdict(filePath) {
@@ -118,14 +114,11 @@ async function databaseVerdict(filePath) {
   }
 }
 
-let apiToken;
 let expectedTransactions = 5000;
 try {
   await timed("coldStart", startServer);
   await client.auth.setup.mutate({ username: "stress", password: process.env.STRESS_TEST_PASSWORD ?? "stress-test-password" });
-  const createdToken = await client.access.createToken.mutate({ name: "Нагрузочная проверка", scope: "write", expiresDays: null });
-  apiToken = createdToken.token;
-  check(apiToken.startsWith("top_"), "isolated authentication and API token");
+  check((await client.auth.account.query()).username === "stress", "isolated authentication");
 
   const rows = Array.from({ length: 5000 }, (_, index) => {
     const income = index % 5 === 0;
@@ -152,16 +145,6 @@ try {
   const workspace = await timed("workspace5000", () => client.workspace.get.query());
   check(workspace.transactions.length === 5000, "workspace returns the full large journal", { count: workspace.transactions.length });
 
-  const sameApiId = crypto.randomUUID();
-  const sameApiResults = await timed("concurrentSameClientIdApi", () => Promise.all(
-    Array.from({ length: 20 }, () => apiPost(operation(sameApiId, "Параллельная повторная отправка API"))),
-  ));
-  check(sameApiResults.filter((result) => result.status === 201).length === 1
-    && sameApiResults.filter((result) => result.status === 200 && result.body.idempotent).length === 19,
-  "20 simultaneous identical API writes create exactly one acknowledged operation",
-  sameApiResults.map((result) => ({ status: result.status, idempotent: result.body.idempotent, error: result.body.error })));
-  expectedTransactions += 1;
-
   const sameTrpcId = crypto.randomUUID();
   const sameTrpcResults = await timed("concurrentSameClientIdTrpc", () => Promise.allSettled(
     Array.from({ length: 20 }, () => client.workspace.transactionCreate.mutate(operation(sameTrpcId, "Параллельная повторная отправка tRPC"))),
@@ -180,13 +163,14 @@ try {
 
   const readResults = await timed("concurrentReads40", () => Promise.all(Array.from({ length: 40 }, async () => {
     const start = performance.now();
-    const response = await fetch(`${origin}/api/v1/transactions?limit=100`, { headers: { Authorization: `Bearer ${apiToken}` } });
-    const body = await response.json();
-    return { status: response.status, count: body.count, duration: performance.now() - start };
+    const response = await fetch(`${origin}/api/trpc/workspace.get`, { headers: { Origin: origin, Cookie: sessionCookie } });
+    if (!response.ok) throw new Error(`Concurrent workspace read failed: ${response.status}`);
+    const payload = await response.json();
+    return { count: payload.result.data.json.transactions.length, duration: performance.now() - start };
   })));
   const sortedReadTimes = readResults.map((result) => result.duration).sort((a, b) => a - b);
   report.timings.readP95 = Math.round(sortedReadTimes[Math.floor(sortedReadTimes.length * 0.95) - 1] * 10) / 10;
-  check(readResults.every((result) => result.status === 200 && result.count === 100), "40 concurrent large-journal reads succeed", { p95: report.timings.readP95 });
+  check(readResults.every((result) => result.count === expectedTransactions), "40 concurrent large-journal reads succeed", { p95: report.timings.readP95 });
 
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
@@ -265,7 +249,9 @@ try {
   report.counts = { expectedTransactions, databaseTransactions: database.transactions, readP95: report.timings.readP95 };
   check(database.integrity === "ok" && database.transactions === expectedTransactions, "final SQLite integrity and exact transaction count", database);
   check(report.timings.import5000 < 30_000 && report.timings.duplicateImport5000 < 30_000, "bulk imports stay within the 30-second stress budget", report.timings);
-  check(report.timings.readP95 < 2000, "concurrent read p95 stays below two seconds", { p95: report.timings.readP95 });
+  // The former external endpoint returned only the journal. Keep all 40 requests,
+  // but budget for complete workspace snapshots (journal, plans, notes and settings).
+  check(report.timings.readP95 < 5000, "40 concurrent full-workspace reads keep p95 below five seconds", { p95: report.timings.readP95 });
   check(["largeDashboardMobile", "largeTransactionsMobile", "largeAnalyticsMobile"].every((name) => report.timings[name] < 15000), "large-data mobile routes stay within the 15-second stress budget", report.timings);
 
   report.finishedAt = new Date().toISOString();

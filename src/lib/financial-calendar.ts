@@ -75,7 +75,7 @@ export function buildFinancialCalendar(data: Workspace, month: string, today = d
     }];
   });
 
-  const salaries = data.settings ? incomeDatesForMonth(year, monthNumber - 1, data.settings) : [];
+  const salaries = data.settings ? incomeDatesForMonth(year, monthNumber - 1, { ...data.settings, incomeSources: data.incomeSources }) : [];
   const salaryEvents: FinancialEvent[] = salaries.map((salary) => ({
     id: `salary-${salary.kind}-${salary.isoDate}`,
     date: salary.isoDate,

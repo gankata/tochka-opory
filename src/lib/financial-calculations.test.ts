@@ -109,6 +109,10 @@ function workspace(patch: Partial<Workspace> = {}): Workspace {
     moods: [],
     options: [],
     notes: [],
+    incomeSources: [
+      { id: 1, userId: 1, name: "Первая зарплата", dayOfMonth: 15, sortOrder: 0, ...stamps },
+      { id: 2, userId: 1, name: "Вторая зарплата", dayOfMonth: null, sortOrder: 1, ...stamps },
+    ],
     reminders: [],
     reconciliations: [],
     ...patch,

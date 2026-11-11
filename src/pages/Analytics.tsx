@@ -272,10 +272,10 @@ function CategoryComposition({ model, kind }: { model: AnalyticsModel; kind: Ana
 function CashFlowForecast({ data }: { data: Workspace }) {
   const reducedMotion = useReducedMotion();
   const forecast = useMemo(() => buildCashFlowForecast(data.transactions, data.payments, calculateWorkspace(data).bookRub), [data]);
-  const unconfirmedIncome = useMemo(() => buildUnconfirmedIncomeSchedule(data.settings!, todayISO(), forecast.end), [data.settings, forecast.end]);
+  const unconfirmedIncome = useMemo(() => buildUnconfirmedIncomeSchedule({ ...data.settings!, incomeSources: data.incomeSources }, todayISO(), forecast.end), [data.settings, data.incomeSources, forecast.end]);
   const endingBalance = forecast.points.at(-1)?.balance ?? 0;
   const startsNegative = (forecast.points[0]?.balance ?? 0) < 0;
-  return <Section title="Прогноз остатка на 90 дней" description="Сценарий без неподтверждённых доходов: только текущие рубли, внесённые будущие операции и регулярные платежи. Валюта и неизвестные суммы зарплат не добавляются автоматически." className="mt-5">
+  return <Section title="Прогноз остатка на 90 дней" description="Сценарий без неподтверждённых доходов: только текущие рубли, внесённые будущие операции и регулярные платежи. Валюта и неизвестные суммы плановых поступлений не добавляются автоматически." className="mt-5">
     {unconfirmedIncome.length > 0 && <div className="mb-4 rounded-xl border border-dashed border-border bg-secondary/30 p-4" data-testid="unconfirmed-income-schedule">
       <p className="text-sm font-medium">Плановые даты выплат — без суммы в прогнозе</p>
       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Это календарные отметки из настроек, а не подтверждённые поступления. Их суммы не угадываются по прошлым месяцам. Внесённые будущие доходы учитываются отдельно.</p>

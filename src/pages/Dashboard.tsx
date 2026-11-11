@@ -4,13 +4,13 @@ import { ArrowDown, ArrowRight, ArrowUp, CalendarClock, ChevronDown, ChevronRigh
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { currencyDefinition, currencyMoney } from "@contracts/currencies";
 import { trpc } from "@/providers/trpc";
-import { calculateWorkspace, formatDate, money, nextReminder, operationAmount, operationCurrency, positiveForeignBalances } from "@/lib/utils-app";
+import { calculateWorkspace, formatDate, money, operationAmount, operationCurrency, positiveForeignBalances } from "@/lib/utils-app";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorPage, LoadingPage, Metric, PageHeader, Section } from "@/components/app/Common";
 
-type DashboardBlock = "metrics" | "wallets" | "planning" | "insights" | "reminders";
-const dashboardLabels: Record<DashboardBlock, string> = { metrics: "Ключевые показатели", wallets: "Кошелёк по валютам", planning: "Доход и запас", insights: "Доходы и состояние", reminders: "Напоминания" };
-const defaultDashboardOrder: DashboardBlock[] = ["metrics", "wallets", "planning", "insights", "reminders"];
+type DashboardBlock = "metrics" | "wallets" | "planning" | "insights";
+const dashboardLabels: Record<DashboardBlock, string> = { metrics: "Ключевые показатели", wallets: "Кошелёк по валютам", planning: "Доход и запас", insights: "Доходы и состояние" };
+const defaultDashboardOrder: DashboardBlock[] = ["metrics", "wallets", "planning", "insights"];
 type DashboardPreferences = { order: DashboardBlock[]; hidden: DashboardBlock[]; compact: boolean };
 function readDashboardPreferences(): DashboardPreferences {
   const fallback = { order: defaultDashboardOrder, hidden: [], compact: false };
@@ -36,7 +36,6 @@ export default function Dashboard() {
   const chartData = Object.entries(calc.actualTransactions.filter((t) => t.type === "Доход").reduce<Record<string, number>>((acc, t) => {
     const key = t.operationDate.slice(0, 7); acc[key] = (acc[key] ?? 0) + t.amountRub; return acc;
   }, {})).sort(([a], [b]) => a.localeCompare(b)).slice(-9).map(([key, value]) => ({ month: new Intl.DateTimeFormat("ru-RU", { month: "short" }).format(new Date(`${key}-02T12:00:00`)), value }));
-  const upcoming = data.reminders.filter((r) => r.enabled).map((r) => ({ reminder: r, next: nextReminder(r) })).filter((r) => r.next).sort((a, b) => a.next!.getTime() - b.next!.getTime()).slice(0, 3);
   const recentMoods = data.moods.slice(0, 7);
   const averageMood = recentMoods.length ? recentMoods.reduce((sum, m) => sum + m.mood, 0) / recentMoods.length : null;
   const recentTransactions = calc.actualTransactions.slice(0, 4);
@@ -129,20 +128,20 @@ export default function Dashboard() {
 
       <div id="dashboard-details" className={showDetails ? "contents" : "hidden"}>
         <div style={advancedBlockStyle("planning")} className={`grid gap-5 xl:grid-cols-[1.3fr_1fr] ${blockClass("planning")}`}>
-          {salaryForecast ? <Section title={salaryForecast.daysLeft === 0 ? "Зарплата сегодня" : `До зарплаты: ${salaryForecast.daysLeft} дн.`} description={`${salaryForecast.payment.label} — ${formatDate(salaryForecast.date)}${salaryForecast.payment.shifted ? ` Перенос с ${formatDate(salaryForecast.payment.nominalDate)}: ${salaryForecast.payment.shiftReason?.toLowerCase()}.` : ""} Рублёвый прогноз учитывает непроведённые платежи и плановые повседневные траты; другие валюты не входят.`}>
+          {salaryForecast ? <Section title={salaryForecast.daysLeft === 0 ? "Доход сегодня" : `До поступления: ${salaryForecast.daysLeft} дн.`} description={`${salaryForecast.payment.label} — ${formatDate(salaryForecast.date)}${salaryForecast.payment.shifted ? ` Перенос с ${formatDate(salaryForecast.payment.nominalDate)}: ${salaryForecast.payment.shiftReason?.toLowerCase()}.` : ""} Рублёвый прогноз учитывает непроведённые платежи и плановые повседневные траты; другие валюты не входят.`}>
             <div className="mb-5 grid gap-2 sm:grid-cols-2">{calc.salarySchedule.map((payment) => <button key={`${payment.kind}-${payment.isoDate}`} onClick={() => navigate("/calendar")} className="rounded-xl bg-secondary/55 p-3 text-left transition-colors hover:bg-secondary"><p className="text-xs text-muted-foreground">{payment.label} · {payment.rule}</p><p className="number mt-0.5 font-semibold">{formatDate(payment.date)}</p>{payment.shifted && <p className="mt-1 text-[11px] text-muted-foreground">перенос: {payment.shiftReason?.toLowerCase()}</p>}</button>)}</div>
             <div className="grid gap-6 py-2 sm:grid-cols-2">
               <Metric label="Ожидаемый остаток в ₽" value={money(salaryForecast.forecast)} note={salaryForecast.forecast >= 0 ? "По текущему плану денег хватает" : "Нужно пересмотреть траты или даты платежей"} tone={salaryForecast.forecast >= 0 ? "good" : "danger"} />
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Точно до зарплаты</span><span className="number font-medium">{money(salaryForecast.known)}</span></div>
+                <div className="flex justify-between gap-3"><span className="text-muted-foreground">Точно до поступления</span><span className="number font-medium">{money(salaryForecast.known)}</span></div>
                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">Возможные платежи</span><span className="number font-medium">{money(salaryForecast.possible)}</span></div>
                 <div className="flex justify-between gap-3"><span className="text-muted-foreground">План на жизнь в день</span><span className="number font-medium">{money(calc.dailyVariable)}</span></div>
               </div>
             </div>
             {(missingDates > 0 || unsetEnvelopes > 0) && <div className="mt-5 rounded-xl bg-secondary/70 p-4 text-sm"><span className="font-medium">Прогноз можно уточнить.</span><span className="text-muted-foreground"> {missingDates > 0 ? `У ${missingDates} платежей нет даты. ` : ""}{unsetEnvelopes > 0 ? `У ${unsetEnvelopes} конвертов нет оценки или лимита.` : ""}</span><button onClick={() => navigate("/plan")} className="mt-2 flex min-h-11 items-center gap-1 font-medium text-primary">Открыть план<ChevronRight className="h-4 w-4" /></button></div>}
-          </Section> : <Section title="Доход без фиксированных дат" description="Подходит для ежедневной, сдельной и нерегулярной оплаты. Здесь нет обратного отсчёта и прогноза «до зарплаты» — только внесённые поступления.">
-            <div className="flex items-start gap-3 rounded-xl bg-secondary/55 p-4"><CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="text-sm leading-relaxed">Записывайте доход в день получения. Запас, плановые платежи и аналитика используют фактические операции и продолжают работать.</p><p className="number mt-3 font-semibold">В этом месяце внесено: {money(calc.monthIncome)}</p></div></div>
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button className="min-h-11 gap-2" onClick={() => navigate("/operations?new=1&type=Доход")}><Plus className="h-4 w-4" />Добавить доход</Button><Button variant="outline" className="min-h-11" onClick={() => navigate("/data?tab=settings")}>Изменить график</Button></div>
+          </Section> : <Section title={data.settings.incomeSchedule === "irregular" ? "Доход без фиксированных дат" : "Плановые источники не настроены"} description={data.settings.incomeSchedule === "irregular" ? "Подходит для ежедневной, сдельной и нерегулярной оплаты. Здесь нет обратного отсчёта — только внесённые поступления." : "Добавьте регулярные источники в настройках, чтобы увидеть ближайшие даты и осторожный рублёвый прогноз до поступления."}>
+            <div className="flex items-start gap-3 rounded-xl bg-secondary/55 p-4"><CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><p className="text-sm leading-relaxed">{data.settings.incomeSchedule === "irregular" ? "Записывайте доход в день получения. Запас, плановые платежи и аналитика используют фактические операции и продолжают работать." : "Пока приложение не создаёт плановых дат и не предполагает суммы дохода. Фактические операции, запас и аналитика продолжают работать."}</p><p className="number mt-3 font-semibold">В этом месяце внесено: {money(calc.monthIncome)}</p></div></div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button className="min-h-11 gap-2" onClick={() => navigate("/operations?new=1&type=Доход")}><Plus className="h-4 w-4" />Добавить доход</Button><Button variant="outline" className="min-h-11" onClick={() => navigate("/data?tab=settings")}>{data.settings.incomeSchedule === "irregular" ? "Изменить график" : "Настроить источники"}</Button></div>
           </Section>}
 
           <Section title="Неприкосновенный запас" description={`${money(calc.reserveBase)} из рублёвого остатка доступно для запаса при цели ${money(calc.reserveTarget)}. Иностранная валюта не входит в расчёт.`}>
@@ -163,9 +162,6 @@ export default function Dashboard() {
           </Section>
         </div>
 
-        <Section title="Ближайшие напоминания" description="Расписание хранится в приложении; его можно выгрузить в календарь телефона." className={`mt-5 ${blockClass("reminders")}`} style={advancedBlockStyle("reminders")}>
-          {upcoming.length ? <div className="grid gap-2 md:grid-cols-3">{upcoming.map(({ reminder, next }) => <button key={reminder.id} onClick={() => navigate("/data")} className="flex min-h-20 items-start gap-3 rounded-xl bg-secondary/50 p-4 text-left transition-colors hover:bg-secondary"><CalendarClock className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><span><span className="block text-sm font-medium">{reminder.title}</span><span className="mt-1 block text-xs text-muted-foreground">{formatDate(next!)} · {new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(next!)}</span></span></button>)}</div> : <EmptyState title="Активных напоминаний нет" text="Включите или добавьте напоминание в разделе «Данные»." />}
-        </Section>
       </div>
 
       <div style={{ order: 6 }} className="flex flex-col items-center justify-between gap-2 rounded-xl border border-dashed px-4 py-3 sm:flex-row">

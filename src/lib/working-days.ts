@@ -103,10 +103,10 @@ export function lastRussianWorkingDay(year: number, monthIndex: number) {
   return previousRussianWorkingDay(new Date(year, monthIndex + 1, 0, 12));
 }
 
-import type { IncomeScheduleConfig } from "@contracts/incomeSchedule";
+import { configuredIncomeSources, type IncomeScheduleConfig } from "@contracts/incomeSchedule";
 
 export type SalaryPayment = {
-  kind: "first" | "last";
+  kind: string;
   label: string;
   rule: string;
   date: Date;
@@ -141,35 +141,19 @@ function paymentForNominalDate(
 }
 
 export function incomeDatesForMonth(year: number, monthIndex: number, config: IncomeScheduleConfig): SalaryPayment[] {
-  if (config.incomeSchedule === "irregular") return [];
   const lastCalendarDay = new Date(year, monthIndex + 1, 0, 12).getDate();
   const safeDay = (day: number) => Math.max(1, Math.min(lastCalendarDay, Math.round(day)));
-  const firstDay = Math.round(config.salaryDay);
-  const payments = [paymentForNominalDate(
-    "first",
-    config.incomeSchedule === "monthly" ? "Зарплата" : "Первая зарплата",
-    `${firstDay}-е число`,
-    new Date(year, monthIndex, safeDay(firstDay), 12),
-  )];
-  if (config.incomeSchedule === "twice") {
-    if (config.secondSalaryDay == null) {
-      payments.push(paymentForNominalDate(
-        "last",
-        "Вторая зарплата",
-        "последний рабочий день",
-        new Date(year, monthIndex, lastCalendarDay, 12),
-      ));
-    } else {
-      const secondDay = Math.round(config.secondSalaryDay);
-      payments.push(paymentForNominalDate(
-        "last",
-        "Вторая зарплата",
-        `${secondDay}-е число`,
-        new Date(year, monthIndex, safeDay(secondDay), 12),
-      ));
-    }
-  }
-  return payments;
+  const hasDedicatedSources = config.incomeSources !== undefined;
+  return configuredIncomeSources(config).map((source, index) => {
+    const day = source.dayOfMonth == null ? null : Math.round(source.dayOfMonth);
+    const nominalDay = day == null ? lastCalendarDay : safeDay(day);
+    return paymentForNominalDate(
+      hasDedicatedSources ? `source-${source.id ?? index + 1}` : index === 0 ? "first" : "last",
+      source.name,
+      day == null ? "последний рабочий день" : `${day}-е число`,
+      new Date(year, monthIndex, nominalDay, 12),
+    );
+  }).sort((a, b) => a.date.getTime() - b.date.getTime() || a.label.localeCompare(b.label, "ru"));
 }
 
 export function salaryDatesForMonth(year: number, monthIndex: number, salaryDay = 15): SalaryPayment[] {

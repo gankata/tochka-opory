@@ -82,6 +82,40 @@ test("JSON-архив сохраняет дерево заметок и не п�
   expect(restoredPage?.items[0]).toMatchObject({ title: "Поездка", price: 5000 });
 });
 
+test("архивы сохраняют именованные источники, а старый формат восстанавливает прежние дни", async () => {
+  const user = await ensureLocalUser();
+  const { appRouter } = await import("./router");
+  const caller = appRouter.createCaller({ req: new Request("http://localhost"), resHeaders: new Headers(), user });
+  const archive = await caller.workspace.archiveGet();
+  archive.incomeSources = [
+    { id: 1, userId: user.id, name: "Зарплата", dayOfMonth: 15, sortOrder: 0, createdAt: new Date(), updatedAt: new Date() },
+    { id: 2, userId: user.id, name: "Аренда", dayOfMonth: 5, sortOrder: 1, createdAt: new Date(), updatedAt: new Date() },
+    { id: 3, userId: user.id, name: "Гонорар", dayOfMonth: null, sortOrder: 2, createdAt: new Date(), updatedAt: new Date() },
+  ];
+
+  await caller.workspace.backupImport({ payload: JSON.stringify(archive) });
+  expect((await caller.workspace.get()).incomeSources.map(({ name, dayOfMonth, sortOrder }) => ({ name, dayOfMonth, sortOrder }))).toEqual([
+    { name: "Зарплата", dayOfMonth: 15, sortOrder: 0 },
+    { name: "Аренда", dayOfMonth: 5, sortOrder: 1 },
+    { name: "Гонорар", dayOfMonth: null, sortOrder: 2 },
+  ]);
+
+  const emptyArchive = { ...archive, incomeSources: [] };
+  await caller.workspace.backupImport({ payload: JSON.stringify(emptyArchive) });
+  expect((await caller.workspace.get()).incomeSources).toEqual([]);
+
+  const legacyArchive = {
+    ...archive,
+    settings: { ...archive.settings, incomeSchedule: "twice", salaryDay: 9, secondSalaryDay: null },
+  };
+  delete (legacyArchive as { incomeSources?: unknown }).incomeSources;
+  await caller.workspace.backupImport({ payload: JSON.stringify(legacyArchive) });
+  expect((await caller.workspace.get()).incomeSources.map(({ name, dayOfMonth }) => ({ name, dayOfMonth }))).toEqual([
+    { name: "Первая зарплата", dayOfMonth: 9 },
+    { name: "Вторая зарплата", dayOfMonth: null },
+  ]);
+});
+
 test("сбой автоматической копии не блокирует доступ к существующим данным", async () => {
   const user = await ensureLocalUser();
   await getDb().update(backups).set({ createdAt: new Date(0) }).where(eq(backups.userId, user.id));

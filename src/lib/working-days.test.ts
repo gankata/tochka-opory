@@ -62,8 +62,39 @@ describe("гибкий график дохода", () => {
     expect(payment.shiftReason).toBe("Суббота");
   });
 
+  it("поддерживает любое число именованных источников и сортирует их по датам", () => {
+    const payments = incomeDatesForMonth(2026, 10, {
+      incomeSchedule: "twice", salaryDay: 15, secondSalaryDay: null,
+      incomeSources: [
+        { id: 11, name: "Зарплата", dayOfMonth: 15 },
+        { id: 12, name: "Аренда квартиры", dayOfMonth: 5 },
+        { id: 13, name: "Гонорар", dayOfMonth: null },
+      ],
+    });
+
+    expect(payments.map(({ label, isoDate, kind }) => ({ label, isoDate, kind }))).toEqual([
+      { label: "Аренда квартиры", isoDate: "2026-11-05", kind: "source-12" },
+      { label: "Зарплата", isoDate: "2026-11-13", kind: "source-11" },
+      { label: "Гонорар", isoDate: "2026-11-30", kind: "source-13" },
+    ]);
+  });
+
+  it("сокращает день отдельного источника до конца февраля и переносит выходной", () => {
+    const [payment] = incomeDatesForMonth(2026, 1, {
+      incomeSchedule: "monthly", salaryDay: 15, secondSalaryDay: null,
+      incomeSources: [{ name: "Аренда", dayOfMonth: 31 }],
+    });
+    expect(payment).toMatchObject({ label: "Аренда", nominalIsoDate: "2026-02-28", isoDate: "2026-02-27", shiftReason: "Суббота" });
+  });
+
+  it("уважает явно пустой список и не подставляет старые зарплатные даты", () => {
+    expect(incomeDatesForMonth(2026, 10, {
+      incomeSchedule: "twice", salaryDay: 10, secondSalaryDay: 25, incomeSources: [],
+    })).toEqual([]);
+  });
+
   it("не создаёт плановых выплат для ежедневного, сдельного или нерегулярного дохода", () => {
-    const config = { incomeSchedule: "irregular", salaryDay: 15, secondSalaryDay: null } as const;
+    const config = { incomeSchedule: "irregular", salaryDay: 15, secondSalaryDay: null, incomeSources: [{ name: "Скрытый источник", dayOfMonth: 5 }] } as const;
     expect(incomeDatesForMonth(2026, 10, config)).toEqual([]);
     expect(upcomingIncomePayments(config, dateFromISO("2026-11-10"))).toEqual([]);
   });

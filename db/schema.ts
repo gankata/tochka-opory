@@ -53,6 +53,15 @@ export const appSettings = sqliteTable("appSettings", {
   ...timestamps,
 });
 
+export const incomeSources = sqliteTable("incomeSources", {
+  id: id(),
+  userId: userId().notNull(),
+  name: text("name").notNull(),
+  dayOfMonth: integer("dayOfMonth"),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  ...timestamps,
+}, (t) => ({ userIdx: index("income_sources_user_order_idx").on(t.userId, t.sortOrder, t.id) }));
+
 export const transactions = sqliteTable("transactions", {
   id: id(),
   userId: userId().notNull(),

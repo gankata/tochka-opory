@@ -29,6 +29,10 @@ function workspace(patch: Partial<Workspace> = {}): Workspace {
       walletDays: 3, largeExpenseThreshold: 10000, currencyRates: {}, currencyBalances: {}, ...stamps,
     },
     transactions: [], payments: [], envelopes: [], goals: [], moods: [], options: [], notes: [],
+    incomeSources: [
+      { id: 1, userId: 1, name: "Первая зарплата", dayOfMonth: 15, sortOrder: 0, ...stamps },
+      { id: 2, userId: 1, name: "Вторая зарплата", dayOfMonth: null, sortOrder: 1, ...stamps },
+    ],
     reminders: [], reconciliations: [], ...patch,
   };
 }
@@ -73,10 +77,28 @@ describe("финансовый календарь", () => {
   });
 
   it("показывает пользовательские дни двух выплат", () => {
-    const data = workspace();
-    data.settings = { ...data.settings!, salaryDay: 10, secondSalaryDay: 25 };
+    const data = workspace({ incomeSources: [
+      { id: 1, userId: 1, name: "Аванс", dayOfMonth: 10, sortOrder: 0, ...stamps },
+      { id: 2, userId: 1, name: "Зарплата", dayOfMonth: 25, sortOrder: 1, ...stamps },
+    ] });
     const result = buildFinancialCalendar(data, "2026-11", "2026-11-01");
     expect(result.salaries.map((salary) => salary.isoDate)).toEqual(["2026-11-10", "2026-11-25"]);
+  });
+
+  it("использует названия всех регулярных источников и не присваивает им суммы", () => {
+    const data = workspace({ incomeSources: [
+      { id: 1, userId: 1, name: "Зарплата", dayOfMonth: 15, sortOrder: 0, ...stamps },
+      { id: 2, userId: 1, name: "Аренда квартиры", dayOfMonth: 5, sortOrder: 1, ...stamps },
+      { id: 3, userId: 1, name: "Гонорар", dayOfMonth: null, sortOrder: 2, ...stamps },
+    ] });
+    const result = buildFinancialCalendar(data, "2026-11", "2026-11-01");
+
+    expect(result.salaries.map(({ label, isoDate }) => ({ label, isoDate }))).toEqual([
+      { label: "Аренда квартиры", isoDate: "2026-11-05" },
+      { label: "Зарплата", isoDate: "2026-11-13" },
+      { label: "Гонорар", isoDate: "2026-11-30" },
+    ]);
+    expect(result.events.filter((event) => event.kind === "salary").map((event) => event.amountRub)).toEqual([null, null, null]);
   });
 
   it("не создаёт зарплатные события для нерегулярного дохода, но сохраняет фактические поступления", () => {

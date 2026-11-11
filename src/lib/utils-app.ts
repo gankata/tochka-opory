@@ -1,4 +1,4 @@
-import type { Payment, Reminder, Settings, Workspace } from "@/types";
+import type { Payment, Settings, Workspace } from "@/types";
 import { currencyCodes } from "@contracts/currencies";
 import { normalizeOperationCategory } from "@contracts/operationCategories";
 import { lastRussianWorkingDay, upcomingIncomePayments } from "@/lib/working-days";
@@ -38,10 +38,6 @@ export function operationAmount(transaction: Transaction) {
 export const decimal = (value: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value);
 export const formatDate = (value: string | Date, withYear = true) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) }).format(typeof value === "string" ? parseDay(value) : value);
 export const formatDateTime = (value: Date) => new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(value);
-export const toInputDateTime = (value: Date) => {
-  const d = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
-  return d.toISOString().slice(0, 16);
-};
 
 export function paymentAmount(p: Payment, upper = false) {
   if (p.amount != null) return p.amount;
@@ -138,7 +134,7 @@ export function calculateWorkspace(data: Workspace, now = new Date()) {
   const freeOverReserve = roundMoney(reserveBase - reserveTarget);
   const reserveGap = roundMoney(Math.max(0, -freeOverReserve));
   const spendableRub = Math.max(0, freeOverReserve);
-  const salarySchedule = upcomingIncomePayments(s, now, 2);
+  const salarySchedule = upcomingIncomePayments({ ...s, incomeSources: data.incomeSources }, now, 2);
   const salaryPayment = salarySchedule[0] ?? null;
   const salary = salaryPayment?.date ?? null;
   const salaryDaysLeft = salary ? Math.max(0, Math.ceil((salary.getTime() - parseDay(today).getTime()) / 86400000)) : null;
@@ -209,38 +205,4 @@ export function downloadBlob(content: BlobPart, filename: string, type = "text/p
 export function toCsv(rows: Array<Array<string | number | null | undefined>>) {
   return "\uFEFF" + rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`).join(";")).join("\r\n");
 }
-const icsEscape = (value: string) => value.replaceAll("\\", "\\\\").replaceAll("\n", "\\n").replaceAll(",", "\\,").replaceAll(";", "\\;");
-const icsDate = (date: Date) => date.toISOString().replaceAll("-", "").replaceAll(":", "").replace(/\.\d{3}/, "");
-export function remindersToIcs(reminders: Reminder[]) {
-  const events = reminders.filter((r) => r.enabled).map((r) => [
-    "BEGIN:VEVENT", `UID:${r.uid}`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(r.startAt)}`,
-    `SUMMARY:${icsEscape(r.title)}`, `DESCRIPTION:${icsEscape(r.description ?? "")}`,
-    r.recurrence ? `RRULE:${r.recurrence}` : "", "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEscape(r.title)}`, "TRIGGER:PT0M", "END:VALARM", "END:VEVENT",
-  ].filter(Boolean).join("\r\n"));
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Tochka Opory//RU//", "CALSCALE:GREGORIAN", "X-WR-CALNAME:Точка опоры — напоминания", ...events, "END:VCALENDAR"].join("\r\n");
-}
-
-export function nextReminder(reminder: Reminder, now = new Date()): Date | null {
-  const start = reminder.startAt;
-  if (!reminder.recurrence) return start >= now ? start : null;
-  if (reminder.recurrence.includes("FREQ=DAILY")) {
-    const d = new Date(now); d.setHours(start.getHours(), start.getMinutes(), 0, 0); if (d < now) d.setDate(d.getDate() + 1); return d;
-  }
-  if (reminder.recurrence.includes("FREQ=WEEKLY")) {
-    const match = reminder.recurrence.match(/BYDAY=([A-Z,]+)/); const map: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
-    const days = (match?.[1]?.split(",") ?? ["SU"]).map((d) => map[d]);
-    const candidates = days.map((day) => { const d = new Date(now); d.setDate(d.getDate() + ((day - d.getDay() + 7) % 7)); d.setHours(start.getHours(), start.getMinutes(), 0, 0); if (d < now) d.setDate(d.getDate() + 7); return d; });
-    return candidates.sort((a, b) => a.getTime() - b.getTime())[0];
-  }
-  if (reminder.recurrence.includes("FREQ=MONTHLY")) {
-    const match = reminder.recurrence.match(/BYMONTHDAY=([\d,]+)/); const days = (match?.[1]?.split(",") ?? [String(start.getDate())]).map(Number);
-    const candidates: Date[] = [];
-    for (let offset = 0; offset < 2; offset++) for (const day of days) {
-      const d = new Date(now.getFullYear(), now.getMonth() + offset, day, start.getHours(), start.getMinutes()); if (d >= now) candidates.push(d);
-    }
-    return candidates.sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
-  }
-  return start >= now ? start : null;
-}
-
 export const moodColor = (score: number) => score <= 2 ? "#b9514c" : score <= 4 ? "#cf8052" : score <= 6 ? "#c2a356" : score <= 8 ? "#6c9a7d" : "#347563";

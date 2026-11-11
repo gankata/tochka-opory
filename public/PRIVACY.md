@@ -1,6 +1,6 @@
 # Приватность · Privacy
 
-Редакция: 8 ноября 2026 г. · Version: November 8, 2026
+Редакция: 12 ноября 2026 г. · Version: November 12, 2026
 
 ## Русский
 
@@ -10,13 +10,13 @@
 
 ### Какие данные и где хранятся
 
-В локальном каталоге `data/` сохраняются внесённые вами финансовые записи, настройки, цели, напоминания, записи настроения, заметки, изображения, сведения об активах, импортированные правила и история изменений. Основная база — `data/tochka-opory.db`; автоматические SQLite-копии — в `data/backups/`.
+В локальном каталоге `data/` сохраняются внесённые вами финансовые записи, настройки, цели, записи настроения, заметки, изображения, сведения об активах, импортированные правила и история изменений. Основная база — `data/tochka-opory.db`; автоматические SQLite-копии — в `data/backups/`. В старых базах и архивах также могут оставаться исторические записи функций, удалённых из новых версий интерфейса.
 
-Локальный пароль хранится только как scrypt-хеш с отдельной солью. Сессионные и API-токены сохраняются в виде SHA-256-хешей. Журналы предназначены для диагностики и могут содержать технические сведения: время, маршрут, статус и текст ошибки.
+Локальный пароль хранится только как scrypt-хеш с отдельной солью. Сессионные токены сохраняются в виде SHA-256-хешей. Журналы предназначены для диагностики и могут содержать технические сведения: время, маршрут, статус и текст ошибки.
 
 ### Что не зашифровано
 
-Обычная SQLite-база, её резервные копии, полный JSON-экспорт и экспортированные CSV/Markdown/ICS/PDF не шифруются приложением. Их сможет прочитать человек или программа, получившие доступ к соответствующим файлам. Отдельный зашифрованный экспорт использует AES-256-GCM; его надёжность также зависит от стойкости и сохранности вашего пароля.
+Обычная SQLite-база, её резервные копии, полный JSON-экспорт и экспортированные CSV/Markdown/PDF не шифруются приложением. Их сможет прочитать человек или программа, получившие доступ к соответствующим файлам. Отдельный зашифрованный экспорт использует AES-256-GCM; его надёжность также зависит от стойкости и сохранности вашего пароля.
 
 Используйте шифрование диска операционной системы: FileVault на macOS, BitLocker/Device Encryption на Windows или аналогичный механизм. Защитите свою учётную запись ОС и не передавайте файлы данных посторонним.
 
@@ -44,13 +44,13 @@ Tochka Opory runs on your computer by default. The developer does not receive yo
 
 ### Data and storage
 
-The local `data/` directory contains the financial records, settings, goals, reminders, mood entries, notes, images, asset records, import rules, and change history you create. The main database is `data/tochka-opory.db`; automatic SQLite backups are stored in `data/backups/`.
+The local `data/` directory contains the financial records, settings, goals, mood entries, notes, images, asset records, import rules, and change history you create. The main database is `data/tochka-opory.db`; automatic SQLite backups are stored in `data/backups/`. Older databases and archives may also contain historical records for features removed from newer interfaces.
 
-The local password is stored only as a salted scrypt hash. Session and API tokens are stored as SHA-256 hashes. Diagnostic logs may contain technical details such as timestamps, routes, status codes, and error messages.
+The local password is stored only as a salted scrypt hash. Session tokens are stored as SHA-256 hashes. Diagnostic logs may contain technical details such as timestamps, routes, status codes, and error messages.
 
 ### What is not encrypted
 
-The regular SQLite database, SQLite backups, full JSON exports, and exported CSV/Markdown/ICS/PDF files are not encrypted by the application. Anyone or any software with access to those files may read them. The separate encrypted export uses AES-256-GCM; its protection also depends on the strength and safekeeping of your password.
+The regular SQLite database, SQLite backups, full JSON exports, and exported CSV/Markdown/PDF files are not encrypted by the application. Anyone or any software with access to those files may read them. The separate encrypted export uses AES-256-GCM; its protection also depends on the strength and safekeeping of your password.
 
 Use operating-system disk encryption, such as FileVault on macOS or BitLocker/Device Encryption on Windows. Protect your OS account and do not share data files with untrusted people.
 
