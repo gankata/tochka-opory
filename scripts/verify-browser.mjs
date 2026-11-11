@@ -311,7 +311,7 @@ try {
   await page.reload({ waitUntil: "networkidle" });
   const updateDialog = page.getByRole("dialog", { name: "Что нового", exact: true });
   await updateDialog.waitFor();
-  await updateDialog.locator("li").filter({ hasText: "весь снимок помещается" }).waitFor();
+  await updateDialog.locator("li").filter({ hasText: "нулевой границе" }).waitFor();
   await page.screenshot({ path: path.join(output, "guide-update-desktop.jpg"), type: "jpeg", quality: 90 });
   await updateDialog.getByRole("button", { name: "Открыть руководство", exact: true }).click();
   await guideDialog.waitFor();
