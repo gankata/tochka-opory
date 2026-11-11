@@ -134,7 +134,7 @@ export function calculateWorkspace(data: Workspace, now = new Date()) {
   const mandatoryMonthly = roundMoney(requiredFixed + requiredVariable);
   const reserveTarget = roundMoney(mandatoryMonthly * s.reserveMonths);
   const allocatedGoals = roundMoney(data.goals.reduce((sum, g) => sum + g.savedAmount, 0));
-  const reserveBase = roundMoney(totalRub - allocatedGoals);
+  const reserveBase = roundMoney(bookRub - allocatedGoals);
   const freeOverReserve = roundMoney(reserveBase - reserveTarget);
   const reserveGap = roundMoney(Math.max(0, -freeOverReserve));
   const spendableRub = Math.max(0, freeOverReserve);

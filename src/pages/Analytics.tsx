@@ -7,6 +7,7 @@ import {
   Cell,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   Pie,
   PieChart,
@@ -54,7 +55,7 @@ import {
   todayISO,
   toCsv,
 } from "@/lib/utils-app";
-import { buildCashFlowForecast } from "@/lib/cash-flow";
+import { buildCashFlowForecast, buildUnconfirmedIncomeSchedule } from "@/lib/cash-flow";
 import type { Workspace } from "@/types";
 import { DatePicker } from "@/components/app/DatePicker";
 import AnalyticsSavedViews from "@/components/app/AnalyticsSavedViews";
@@ -243,7 +244,7 @@ function CategoryComposition({ model, kind }: { model: AnalyticsModel; kind: Ana
       onMouseLeave={() => setHoveredIndex(null)}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart tabIndex={-1}>
+        <PieChart tabIndex={-1} aria-hidden="true">
           <Pie data={chartCategories} dataKey="total" nameKey="name" rootTabIndex={-1} innerRadius="62%" outerRadius="88%" paddingAngle={2} stroke="oklch(var(--card))" strokeWidth={2} isAnimationActive={!reducedMotion} animationDuration={500} onMouseEnter={(_, index) => setHoveredIndex(index)} onMouseLeave={() => setHoveredIndex(null)}>
             {chartCategories.map((category, index) => <Cell key={category.name} fill={category.color} opacity={hoveredIndex == null || hoveredIndex === index ? 1 : 0.42} style={{ outline: "none", transition: "opacity 160ms ease" }} />)}
           </Pie>
@@ -270,10 +271,42 @@ function CategoryComposition({ model, kind }: { model: AnalyticsModel; kind: Ana
 
 function CashFlowForecast({ data }: { data: Workspace }) {
   const reducedMotion = useReducedMotion();
-  const forecast = useMemo(() => buildCashFlowForecast(data.transactions, data.payments, calculateWorkspace(data).totalRub), [data]);
-  return <Section title="Прогноз остатка на 90 дней" description="Сценарий на основе текущего расчётного остатка, будущих операций и регулярных платежей. Это не гарантия: незапланированные доходы и траты не учитываются." className="mt-5">
-    <div className="mb-4 grid gap-3 sm:grid-cols-2"><div className="rounded-xl bg-secondary/45 p-4"><p className="text-xs text-muted-foreground">Остаток на {formatDate(forecast.end)}</p><p className="number mt-1 text-xl font-semibold">{money(forecast.points.at(-1)?.balance ?? 0)}</p></div><div className="rounded-xl bg-secondary/45 p-4"><p className="text-xs text-muted-foreground">Минимум сценария</p><p className={`number mt-1 text-xl font-semibold ${forecast.lowest.balance < 0 ? "text-destructive" : ""}`}>{money(forecast.lowest.balance)} <span className="text-xs font-normal text-muted-foreground">· {formatDate(forecast.lowest.date)}</span></p></div></div>
-    <div className="h-64" role="img" aria-label={`Прогноз остатка. Минимум ${money(forecast.lowest.balance)} ${forecast.lowest.date}`}><ResponsiveContainer width="100%" height="100%"><LineChart data={forecast.points} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} accessibilityLayer><CartesianGrid vertical={false} stroke="oklch(var(--chart-grid))" /><XAxis dataKey="label" interval={Math.floor(forecast.points.length / 6)} tick={{ fontSize: 11, fill: "oklch(var(--chart-axis))" }} axisLine={false} tickLine={false} /><YAxis width={65} tick={{ fontSize: 11, fill: "oklch(var(--chart-axis))" }} tickFormatter={(value) => compactNumber.format(Number(value))} axisLine={false} tickLine={false} /><Tooltip formatter={(value) => money(Number(value))} labelFormatter={(_, payload) => payload[0] ? formatDate(payload[0].payload.date) : ""} contentStyle={chartTooltipStyle()} /><ReferenceLine y={0} stroke="oklch(var(--destructive))" strokeDasharray="4 4" /><Line type="monotone" dataKey="balance" name="Остаток" stroke="oklch(var(--chart-income))" strokeWidth={2.5} dot={false} isAnimationActive={!reducedMotion} /></LineChart></ResponsiveContainer></div>
+  const forecast = useMemo(() => buildCashFlowForecast(data.transactions, data.payments, calculateWorkspace(data).bookRub), [data]);
+  const unconfirmedIncome = useMemo(() => buildUnconfirmedIncomeSchedule(data.settings!, todayISO(), forecast.end), [data.settings, forecast.end]);
+  const endingBalance = forecast.points.at(-1)?.balance ?? 0;
+  const startsNegative = (forecast.points[0]?.balance ?? 0) < 0;
+  return <Section title="Прогноз остатка на 90 дней" description="Сценарий без неподтверждённых доходов: только текущие рубли, внесённые будущие операции и регулярные платежи. Валюта и неизвестные суммы зарплат не добавляются автоматически." className="mt-5">
+    {unconfirmedIncome.length > 0 && <div className="mb-4 rounded-xl border border-dashed border-border bg-secondary/30 p-4" data-testid="unconfirmed-income-schedule">
+      <p className="text-sm font-medium">Плановые даты выплат — без суммы в прогнозе</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Это календарные отметки из настроек, а не подтверждённые поступления. Их суммы не угадываются по прошлым месяцам. Внесённые будущие доходы учитываются отдельно.</p>
+      <ul className="mt-3 flex flex-wrap gap-2" aria-label="Плановые выплаты без суммы в прогнозе">
+        {unconfirmedIncome.map((payment) => <li key={`${payment.kind}-${payment.isoDate}`} className="rounded-full border border-border bg-card px-3 py-1.5 text-xs">{payment.label}: {formatDate(payment.isoDate)}</li>)}
+      </ul>
+    </div>}
+    <div className="mb-4 grid gap-3 sm:grid-cols-2">
+      <div className="rounded-xl bg-secondary/45 p-4"><p className="text-xs text-muted-foreground">Рублёвый остаток на {formatDate(forecast.end)}</p><p className={`number mt-1 text-xl font-semibold ${endingBalance < 0 ? "text-destructive" : ""}`}>{money(endingBalance)}</p></div>
+      <div className="rounded-xl bg-secondary/45 p-4"><p className="text-xs text-muted-foreground">Минимум сценария в ₽</p><p className={`number mt-1 text-xl font-semibold ${forecast.lowest.balance < 0 ? "text-destructive" : ""}`}>{money(forecast.lowest.balance)} <span className="text-xs font-normal text-muted-foreground">· {formatDate(forecast.lowest.date)}</span></p></div>
+    </div>
+    {forecast.firstNegative && <div role="alert" className="mb-4 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+      <p className="font-medium text-destructive">{startsNegative ? "Рублёвый остаток уже отрицательный." : `По сценарию рублёвый остаток станет отрицательным ${formatDate(forecast.firstNegative.date)}.`}</p>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Минимум: {money(forecast.lowest.balance)}. Измените план или внесите будущий доход в ₽; имеющаяся иностранная валюта не покрывает дефицит автоматически.</p>
+    </div>}
+    <div className="cash-flow-chart h-64" role="img" aria-label={`Прогноз рублёвого остатка. Минимум ${money(forecast.lowest.balance)} ${forecast.lowest.date}.${forecast.firstNegative ? ` Первый дефицит ${forecast.firstNegative.date}.` : " Отрицательных значений нет."}`}>
+      <ResponsiveContainer width="100%" height="100%"><LineChart data={forecast.points} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} accessibilityLayer>
+        <CartesianGrid vertical={false} stroke="oklch(var(--chart-grid))" />
+        <XAxis dataKey="label" interval={Math.floor(forecast.points.length / 6)} tick={{ fontSize: 11, fill: "oklch(var(--chart-axis))" }} axisLine={false} tickLine={false} />
+        <YAxis width={65} domain={[(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)]} tick={{ fontSize: 11, fill: "oklch(var(--chart-axis))" }} tickFormatter={(value) => compactNumber.format(Number(value))} axisLine={false} tickLine={false} />
+        <Tooltip formatter={(value) => money(Number(value))} labelFormatter={(_, payload) => payload[0] ? formatDate(payload[0].payload.date) : ""} contentStyle={chartTooltipStyle()} />
+        {forecast.firstNegative && <ReferenceArea x1={forecast.points[0]?.label} x2={forecast.points.at(-1)?.label} y1={Math.min(0, forecast.lowest.balance)} y2={0} fill="oklch(var(--destructive))" fillOpacity={0.09} />}
+        <ReferenceLine y={0} stroke="oklch(var(--destructive))" strokeWidth={1.5} strokeDasharray="5 4" label={{ value: "0 ₽", position: "insideTopRight", fill: "oklch(var(--destructive))", fontSize: 11 }} />
+        <Line type="monotone" dataKey="balance" name="Рублёвый остаток" stroke="oklch(var(--chart-income))" strokeWidth={2.5} dot={false} isAnimationActive={!reducedMotion} />
+      </LineChart></ResponsiveContainer>
+    </div>
+    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground" aria-label="Легенда прогноза">
+      <span className="flex items-center gap-2"><span aria-hidden="true" className="h-0.5 w-6" style={{ backgroundColor: "oklch(var(--chart-income))" }} />Прогноз по рублёвым операциям</span>
+      <span className="flex items-center gap-2"><span aria-hidden="true" className="w-6 border-t-2 border-dashed border-destructive" />0 ₽ — граница бюджета</span>
+      {forecast.firstNegative && <span className="flex items-center gap-2"><span aria-hidden="true" className="h-3 w-6 bg-destructive/10" />Зона дефицита</span>}
+    </div>
   </Section>;
 }
 

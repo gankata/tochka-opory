@@ -384,6 +384,12 @@ try {
   await page.locator('[data-currency="USD"]').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-currency="USD"]')?.textContent?.includes("100"));
   await page.screenshot({ path: path.join(output, "dashboard-currency-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+  await page.getByRole("button", { name: "Подробный обзор", exact: true }).click();
+  const rubOnlyReserve = page.locator("section").filter({ has: page.getByRole("heading", { name: "Неприкосновенный запас", exact: true }) });
+  await rubOnlyReserve.getByText(/из рублёвого остатка доступно для запаса/).waitFor();
+  const reserveText = (await rubOnlyReserve.innerText()).replace(/\s/g, "");
+  if (!reserveText.includes("0₽изрублёвогоостатка") || reserveText.includes("8000₽изрублёвогоостатка")) throw new Error(`Reserve must ignore USD before exchange: ${reserveText}`);
+  await page.screenshot({ path: path.join(output, "dashboard-reserve-rub-only-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
 
   await page.goto(`${origin}/operations?new=1&type=${encodeURIComponent("Обмен")}`, { waitUntil: "networkidle" });
   const exchangeDialog = page.getByRole("dialog", { name: "Новая операция", exact: true });
@@ -409,6 +415,14 @@ try {
   await captureGuideImages(page, "03-today");
   await page.goto(`${origin}/operations`, { waitUntil: "networkidle" });
   await page.getByText("Проверочный полный обмен", { exact: true }).first().waitFor();
+  await page.goto(`${origin}/data?tab=settings`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /^Дата остатков, обязательное поле:/ }).click();
+  const startDatePicker = page.locator(".date-picker-popover");
+  await startDatePicker.locator("select").nth(0).selectOption("9");
+  await startDatePicker.locator("select").nth(1).selectOption("2026");
+  await startDatePicker.locator('[data-day="2026-10-01"] button').click();
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await page.getByText("Настройки и валютные курсы сохранены", { exact: true }).waitFor();
 
   errors.length = 0;
   badResponses.length = 0;
@@ -439,6 +453,22 @@ try {
       if (await page.getByLabel("Месяц", { exact: true }).count()) throw new Error("Small month field next to CSV should be removed");
     }
     if (route === "/analytics") await page.getByText("Нет сравнения", { exact: true }).waitFor();
+    if (route === "/mood") {
+      const layout = await page.locator(".mood-insights-grid").evaluate((grid) => {
+        const rect = (title) => {
+          const section = [...grid.children].find((child) => child.querySelector("h2")?.textContent?.trim() === title);
+          if (!section) throw new Error(`Mood section is missing: ${title}`);
+          const box = section.getBoundingClientRect();
+          return { x: box.x, y: box.y, bottom: box.bottom, width: box.width };
+        };
+        return { dynamics: rect("Динамика"), calendar: rect("Календарь"), rhythm: rect("Ритм недели"), correlations: rect("Что наблюдается вместе"), gridWidth: grid.getBoundingClientRect().width };
+      });
+      if (Math.abs(layout.dynamics.y - layout.calendar.y) > 1) throw new Error("Mood chart and calendar should share the top line");
+      if (Math.abs(layout.rhythm.x - layout.dynamics.x) > 1 || Math.abs(layout.rhythm.y - layout.dynamics.bottom - 20) > 1) throw new Error("Mood weekly rhythm should sit directly below the chart");
+      if (Math.abs(layout.calendar.bottom - layout.rhythm.bottom) > 1) throw new Error("Mood calendar should end on the same line as the weekly rhythm");
+      if (layout.correlations.y < Math.max(layout.calendar.bottom, layout.rhythm.bottom) + 19 || Math.abs(layout.correlations.width - layout.gridWidth) > 1) throw new Error("Mood correlations should start immediately below both columns at full width");
+      await page.screenshot({ path: path.join(output, "mood-layout-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
+    }
     await assertAccessible(page, `${name}-empty-desktop`);
     await page.screenshot({ path: path.join(output, `${name}-desktop.jpg`), type: "jpeg", quality: 82, fullPage: true });
     const metrics = await page.evaluate(() => ({
@@ -594,6 +624,21 @@ try {
   const analyticsSummary = page.locator('section[aria-label="Ключевые показатели"]');
   await page.waitForFunction(() => document.querySelector('section[aria-label="Ключевые показатели"]')?.textContent?.replace(/\s/g, "").includes("156540₽"));
   if (!(await analyticsSummary.innerText()).includes("Средний чек")) throw new Error("Analytics summary is incomplete");
+  const cashFlowAlert = page.getByRole("alert").filter({ hasText: "Рублёвый остаток уже отрицательный." });
+  await cashFlowAlert.waitFor();
+  const unconfirmedIncomeSchedule = page.getByTestId("unconfirmed-income-schedule");
+  await unconfirmedIncomeSchedule.getByText("Их суммы не угадываются по прошлым месяцам.", { exact: false }).waitFor();
+  if (await unconfirmedIncomeSchedule.locator("li").count() < 1) throw new Error("Forecast must show scheduled paydays without inventing amounts");
+  await page.getByText("0 ₽ — граница бюджета", { exact: true }).waitFor();
+  const cashFlowChart = page.locator(".cash-flow-chart");
+  const deficitArea = cashFlowChart.locator(".recharts-reference-area .recharts-reference-area-rect");
+  await deficitArea.waitFor();
+  if (await deficitArea.getAttribute("fill") !== "oklch(var(--destructive))") throw new Error("Cash-flow deficit area is missing the destructive color");
+  const zeroBudgetLine = cashFlowChart.locator(".recharts-reference-line-line");
+  if (await zeroBudgetLine.getAttribute("stroke") !== "oklch(var(--destructive))") throw new Error("Cash-flow zero line is missing the destructive color");
+  await page.waitForTimeout(650);
+  await assertAccessible(page, "analytics-cash-flow-negative-desktop");
+  await page.screenshot({ path: path.join(output, "analytics-cash-flow-negative-desktop.jpg"), type: "jpeg", quality: 90, fullPage: true });
 
   await page.getByRole("button", { name: "Сохранить новое", exact: true }).click();
   const saveViewDialog = page.getByRole("dialog", { name: "Сохранить представление", exact: true });
@@ -729,6 +774,66 @@ try {
   await desktopCalendar.getByRole("button", { name: "Сегодня", exact: true }).click();
   await desktopCalendar.waitFor({ state: "hidden" });
   await page.getByRole("button", { name: "Отмена", exact: true }).click();
+
+  for (const entry of [
+    { date: "2026-11-01", topic: "Работа / учёба", emotion: "Спокойствие" },
+    { date: "2026-11-02", topic: "Семья", emotion: "Радость" },
+  ]) {
+    await page.goto(`${origin}/mood?new=1&date=${entry.date}`, { waitUntil: "networkidle" });
+    const moodDialog = page.getByRole("dialog", { name: "Как вы себя чувствуете?", exact: true });
+    await moodDialog.locator("select").nth(2).selectOption(entry.topic);
+    await moodDialog.locator("select").nth(1).selectOption(entry.emotion);
+    await moodDialog.getByRole("button", { name: "Сохранить запись", exact: true }).click();
+    await moodDialog.waitFor({ state: "hidden" });
+  }
+  const moodRecords = page.locator('section[aria-label="Записи настроения"]');
+  const moodRecordItems = moodRecords.locator("article");
+  const allMoodDays = moodRecords.getByRole("button", { name: "Все дни", exact: true });
+  const moodTopic = page.getByLabel("Фильтр по теме", { exact: true });
+  await page.goto(`${origin}/mood?date=2026-11-01`, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 1);
+  await moodTopic.selectOption("Все");
+  if (await moodRecordItems.count() !== 1) throw new Error("Topic filter must not silently change the selected date");
+  await assertAccessible(page, "mood-selected-day-desktop");
+  await moodRecords.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(output, "mood-selected-day-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await allMoodDays.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 2);
+  if (new URL(page.url()).searchParams.has("date")) throw new Error("All days must clear the date URL filter");
+
+  await page.locator('[aria-describedby="calendar-day-2026-11-01-description"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 1);
+  await allMoodDays.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 2);
+
+  const yearMoodDay = page.getByRole("button", { name: /^1 нояб\.\s*2026 г\., настроение 5$/, exact: true });
+  await yearMoodDay.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 1);
+  if (await yearMoodDay.getAttribute("aria-pressed") !== "true") throw new Error("Year map must expose the selected day");
+  await yearMoodDay.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 2);
+  if (await yearMoodDay.getAttribute("aria-pressed") !== "false") throw new Error("Repeated year-map click must clear the selected day");
+
+  await yearMoodDay.click();
+  await moodTopic.selectOption("Семья");
+  await moodRecords.getByText("Для выбранного фильтра записей нет.", { exact: true }).waitFor();
+  const resetMoodFilters = moodRecords.getByRole("button", { name: "Сбросить фильтры", exact: true });
+  await resetMoodFilters.scrollIntoViewIfNeeded();
+  await assertAccessible(page, "mood-empty-filters-desktop");
+  await page.screenshot({ path: path.join(output, "mood-empty-filters-desktop.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await resetMoodFilters.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 2);
+  if (await moodTopic.inputValue() !== "Все" || await allMoodDays.count()) throw new Error("Reset must clear both mood filters");
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await yearMoodDay.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 1);
+  await allMoodDays.scrollIntoViewIfNeeded();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Mood day reset causes mobile overflow");
+  await page.screenshot({ path: path.join(output, "mood-selected-day-mobile.jpg"), type: "jpeg", quality: 90, fullPage: false });
+  await allMoodDays.click();
+  await page.waitForFunction(() => document.querySelectorAll('section[aria-label="Записи настроения"] article').length === 2);
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   await page.goto(`${origin}/plan`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Добавить платёж", exact: true }).click();
@@ -1132,7 +1237,27 @@ try {
   for (const route of ["/", "/operations", "/analytics", "/plan", "/calendar", "/mood", "/notes", "/assets", "/data"]) {
     await page.goto(`${origin}${route}`, { waitUntil: "networkidle" });
     if (route === "/notes") await page.getByRole("button", { name: "Идеи для поездки", exact: true }).click();
+    if (route === "/mood") {
+      const positions = await page.locator(".mood-insights-grid").evaluate((grid) => ["Динамика", "Календарь", "Ритм недели", "Что наблюдается вместе"].map((title) => {
+        const section = [...grid.children].find((child) => child.querySelector("h2")?.textContent?.trim() === title);
+        if (!section) throw new Error(`Mobile mood section is missing: ${title}`);
+        const box = section.getBoundingClientRect();
+        return { title, x: box.x, y: box.y, width: box.width };
+      }));
+      if (!positions.every((position, index) => index === 0 || position.y > positions[index - 1].y)) throw new Error("Mobile mood order must remain chart, calendar, rhythm, correlations");
+      if (positions.some((position) => Math.abs(position.x - positions[0].x) > 1 || Math.abs(position.width - positions[0].width) > 1)) throw new Error("Mobile mood sections must form one aligned column");
+      await page.screenshot({ path: path.join(output, "mood-layout-mobile.jpg"), type: "jpeg", quality: 90, fullPage: true });
+    }
     if (route === "/analytics") {
+      await cashFlowAlert.waitFor();
+      await unconfirmedIncomeSchedule.waitFor();
+      if (await unconfirmedIncomeSchedule.locator("li").count() < 1) throw new Error("Mobile forecast must retain scheduled payday labels");
+      await page.getByText("0 ₽ — граница бюджета", { exact: true }).waitFor();
+      await deficitArea.waitFor();
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) throw new Error("Cash-flow deficit warning overflows on mobile");
+      await page.waitForTimeout(650);
+      await assertAccessible(page, "analytics-cash-flow-negative-mobile");
+      await page.screenshot({ path: path.join(output, "analytics-cash-flow-negative-mobile.jpg"), type: "jpeg", quality: 90, fullPage: true });
       await page.getByRole("button", { name: "Сохранить новое", exact: true }).click();
       const mobileSavedViewDialog = page.getByRole("dialog", { name: "Сохранить представление", exact: true });
       await mobileSavedViewDialog.getByLabel("Название представления", { exact: true }).fill("Мобильное представление");

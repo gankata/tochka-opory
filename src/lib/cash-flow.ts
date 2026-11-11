@@ -1,5 +1,17 @@
 import type { Payment, Transaction } from "@/types";
-import { parseDay, roundMoney, todayISO } from "./utils-app";
+import type { IncomeScheduleConfig } from "@contracts/incomeSchedule";
+import { incomeDatesForMonth } from "./working-days";
+import { operationCurrency, parseDay, roundMoney, todayISO } from "./utils-app";
+
+export function buildUnconfirmedIncomeSchedule(settings: IncomeScheduleConfig, today = todayISO(), end = addDays(today, 90)) {
+  const start = parseDay(today);
+  const last = parseDay(end);
+  const candidates = [];
+  for (let month = new Date(start.getFullYear(), start.getMonth(), 1, 12); month <= last; month = new Date(month.getFullYear(), month.getMonth() + 1, 1, 12)) {
+    candidates.push(...incomeDatesForMonth(month.getFullYear(), month.getMonth(), settings));
+  }
+  return candidates.filter((payment) => payment.isoDate > today && payment.isoDate <= end);
+}
 
 export type CashFlowPoint = { date: string; label: string; balance: number; income: number; expense: number };
 const localIso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -15,7 +27,7 @@ export function buildCashFlowForecast(transactions: Transaction[], payments: Pay
     current.income += income; current.expense += expense; events.set(date, current);
   };
   for (const transaction of transactions) {
-    if (transaction.type === "Обмен" || transaction.operationDate <= today) continue;
+    if (transaction.type === "Обмен" || operationCurrency(transaction) !== "RUB" || transaction.operationDate <= today) continue;
     add(transaction.operationDate, transaction.type === "Доход" ? Math.abs(transaction.amountRub) : 0, transaction.type === "Расход" ? Math.abs(transaction.amountRub) : 0);
   }
   for (const payment of payments) {
@@ -39,5 +51,10 @@ export function buildCashFlowForecast(transactions: Transaction[], payments: Pay
     balance = roundMoney(balance + event.income - event.expense);
     points.push({ date, label: new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(parseDay(date)), balance, ...event });
   }
-  return { points, end, lowest: points.reduce((lowest, point) => point.balance < lowest.balance ? point : lowest, points[0]) };
+  return {
+    points,
+    end,
+    lowest: points.reduce((lowest, point) => point.balance < lowest.balance ? point : lowest, points[0]),
+    firstNegative: points.find((point) => point.balance < 0) ?? null,
+  };
 }

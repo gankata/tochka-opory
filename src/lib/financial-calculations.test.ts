@@ -137,9 +137,9 @@ describe("финансовые расчёты", () => {
     expect(result.futureTransactions.map((item) => item.id)).toEqual([4]);
   });
 
-  it("различает нехватку запаса, свободные деньги и отложенное на цели", () => {
+  it("различает нехватку запаса, свободные деньги и отложенное на цели без иностранной валюты", () => {
     const result = calculateWorkspace(workspace({
-      settings: settings({ reserveMonths: 2 }),
+      settings: settings({ reserveMonths: 2, cashUsd: 100 }),
       payments: [payment(1, "Аренда", 1000)],
       envelopes: [envelope(1, "Еда", 500, { required: true })],
       goals: [goal(1, 200)],
@@ -147,6 +147,7 @@ describe("финансовые расчёты", () => {
 
     expect(result.mandatoryMonthly).toBe(1500);
     expect(result.reserveTarget).toBe(3000);
+    expect(result.totalRub).toBe(9000);
     expect(result.reserveBase).toBe(800);
     expect(result.freeOverReserve).toBe(-2200);
     expect(result.spendableRub).toBe(0);

@@ -145,11 +145,11 @@ export default function Dashboard() {
             <div className="mt-4 flex flex-col gap-2 sm:flex-row"><Button className="min-h-11 gap-2" onClick={() => navigate("/operations?new=1&type=Доход")}><Plus className="h-4 w-4" />Добавить доход</Button><Button variant="outline" className="min-h-11" onClick={() => navigate("/data?tab=settings")}>Изменить график</Button></div>
           </Section>}
 
-          <Section title="Неприкосновенный запас" description={`${money(calc.reserveBase)} доступно для запаса при цели ${money(calc.reserveTarget)}. Общая оценка всех валют: ${money(calc.totalRub)}.`}>
+          <Section title="Неприкосновенный запас" description={`${money(calc.reserveBase)} из рублёвого остатка доступно для запаса при цели ${money(calc.reserveTarget)}. Иностранная валюта не входит в расчёт.`}>
             <div className="mt-7 h-2 overflow-hidden rounded-full bg-secondary"><div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${reservePercent}%` }} /></div>
             <div className="mt-3 flex justify-between text-sm"><span className="font-medium">{Math.round(reservePercent)}% цели</span><span className="text-muted-foreground">{money(calc.reserveGap)} осталось</span></div>
             <div className="mt-7 border-t pt-5"><Metric label={calc.reserveGap > 0 ? "Свободных сверх запаса нет" : "Свободно сверх запаса и целей"} value={money(calc.spendableRub)} note={calc.reserveGap > 0 ? `До выбранного запаса не хватает ${money(calc.reserveGap)}. Это не долг и не отрицательный баланс.` : `На цели уже отложено ${money(calc.allocatedGoals)}`} tone={calc.reserveGap > 0 ? "danger" : "good"} /></div>
-            <div className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Формула: остатки в ₽ по текущим курсам − отложенное на цели − целевой запас. Отрицательный результат показываем как нехватку, а не как разрешение тратить.</div>
+            <div className="mt-4 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />Формула: рублёвый остаток − отложенное на цели − целевой запас. Иностранная валюта не уменьшает нехватку, пока вы не внесли обмен в рубли как операцию.</div>
           </Section>
         </div>
 
